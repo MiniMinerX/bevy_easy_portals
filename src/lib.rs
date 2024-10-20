@@ -1,3 +1,5 @@
+#![doc = include_str!("../README.md")]
+
 #[cfg(feature = "gizmos")]
 pub mod gizmos;
 mod projection;

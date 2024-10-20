@@ -1,3 +1,5 @@
+//! A wrapper around [`Projection`].
+
 use bevy::{
     math::Vec3A,
     pbr::PbrProjectionPlugin,

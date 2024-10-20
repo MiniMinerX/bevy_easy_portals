@@ -1,3 +1,5 @@
+//! Gizmos for [`Portal`] debugging.
+
 use bevy::{color::palettes::tailwind::ORANGE_600, prelude::*, render::primitives::Aabb};
 
 use crate::Portal;
@@ -5,7 +7,7 @@ use crate::Portal;
 #[derive(Reflect, Default, GizmoConfigGroup)]
 pub struct PortalGizmos;
 
-/// Gizmos for [`Portal`]s.
+/// Gizmo plugin for [`Portal`]s.
 ///
 /// These gizmos help visualize aspects like [`Portal`] meshes and where the
 /// [`Portal::target_transform`] is located (along with its facing direction).
@@ -36,9 +38,6 @@ fn debug_portal_cameras(mut gizmos: Gizmos<PortalGizmos>, portal_query: Query<&P
     for portal in &portal_query {
         let start = portal.target_transform.translation;
         let end = start + portal.target_transform.forward() * 0.5;
-        gizmos.arrow(
-            start, end, // portal.target_transform.forward() * 0.5,
-            ORANGE_600,
-        );
+        gizmos.arrow(start, end, ORANGE_600);
     }
 }
