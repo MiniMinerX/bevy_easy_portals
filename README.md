@@ -1,4 +1,4 @@
-# bevy_easy_portals
+# `bevy_easy_portals`
 
 > Easy-to-use portals for Bevy
 
