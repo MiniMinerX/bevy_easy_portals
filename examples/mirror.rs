@@ -75,40 +75,6 @@ fn setup(
     });
 }
 
-fn setoop(
-    mut commands: Commands,
-    mut materials: ResMut<Assets<StandardMaterial>>,
-    mut meshes: ResMut<Assets<Mesh>>,
-) {
-    let primary_camera = commands
-        .spawn(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 0.0, 10.0),
-            ..default()
-        })
-        .id();
-
-    // Where you want the portal to be located
-    let portal_transform = Transform::default();
-
-    // Where the portal's target camera should be
-    let target_transform = Transform::from_xyz(10.0, 0.0, 10.0);
-
-    // Spawn something for the portal to look at
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::default()),
-        material: materials.add(Color::WHITE),
-        transform: Transform::from_xyz(10.0, 0.0, 0.0),
-        ..default()
-    });
-
-    // Spawn the portal, omit a material since one will be added automatically
-    commands.spawn((
-        meshes.add(Rectangle::default()),
-        SpatialBundle::from_transform(portal_transform),
-        Portal::new(primary_camera, target_transform),
-    ));
-}
-
 fn rotate_shape(mut query: Query<&mut Transform, With<Shape>>, time: Res<Time>) {
     let angle = time.delta_seconds() / 2.0;
     for mut transform in &mut query {
