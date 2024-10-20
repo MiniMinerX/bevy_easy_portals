@@ -2,7 +2,7 @@
 
 Easy-to-use portals for Bevy
 
-![screenshot showing a cube being reflected in a mirror using portals](https://github.com/chompaa/bevy_easy_portals/blob/main/assets/mirror.png)
+![screenshot showing a cube being reflected in a mirror using portals](https://raw.githubusercontent.com/chompaa/bevy_easy_portals/main/assets/mirror.png)
 
 ## Getting Started
 
@@ -66,7 +66,7 @@ fn setup(
 
 | `bevy_easy_portals` | `bevy` |
 | :--                 | :--    |
-| `0.1`               | `0.14` |
+| `0.1..0.2`          | `0.14` |
 
 ## Features
 
