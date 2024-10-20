@@ -34,7 +34,7 @@ use projection::PortalProjection;
 #[derive(Default)]
 pub struct PortalPlugin;
 
-/// Label for systems that update [`Portal`] related [`Camera`]s.
+/// Label for systems that update [`Portal`] related cameras.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, SystemSet)]
 pub enum PortalCameraSystem {
     UpdateTransform,
@@ -66,7 +66,10 @@ impl Plugin for PortalPlugin {
 
 /// Component used to create a portal.
 ///
-/// Adding this to an entity triggers [`setup_portal`] to be ran.
+/// Adding this to an entity causes a camera (marked with [`PortalCamera`], and with
+/// [`RenderTarget::Image`]) to be spawned, inheriting the primary camera's properties.
+///
+/// A [`PortalMaterial`] is also inserted on the entity, inherting [`Portal::cull_mode`].
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
 pub struct Portal {
@@ -76,8 +79,8 @@ pub struct Portal {
     pub target_transform: Transform,
     /// The [`Entity`] that has this portal's camera.
     ///
-    /// This is set internally by [`setup_portal`] and should not be manually assigned.
-    target_camera: Option<Entity>,
+    /// This is set internally and should not be manually assigned.
+    pub target_camera: Option<Entity>,
     /// Specifies which side of the portal to cull: "front", "back", or neither.
     ///
     /// If set to `None`, both sides of the portal’s mesh will be rendered.
@@ -114,11 +117,18 @@ pub struct PortalCamera;
 /// Material used for a [`Portal`]'s mesh.
 #[derive(Asset, AsBindGroup, Clone, TypePath)]
 #[bind_group_data(PortalMaterialKey)]
-struct PortalMaterial {
+pub struct PortalMaterial {
     #[texture(0)]
     #[sampler(1)]
     color_texture: Option<Handle<Image>>,
-    cull_mode: Option<Face>,
+    /// Specifies which side of the portal to cull: "front", "back", or neither.
+    ///
+    /// If set to `None`, both sides of the portal’s mesh will be rendered.
+    ///
+    /// This field is inherited from whatever is set on [`Portal`].
+    ///
+    /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
+    pub cull_mode: Option<Face>,
 }
 
 impl Material for PortalMaterial {
@@ -138,7 +148,7 @@ impl Material for PortalMaterial {
 }
 
 #[derive(Clone, PartialEq, Eq, Hash)]
-struct PortalMaterialKey {
+pub struct PortalMaterialKey {
     cull_mode: Option<Face>,
 }
 
@@ -262,7 +272,7 @@ fn setup_portal(
 /// # Notes
 ///
 /// * Both [`Transform`] and [`GlobalTransform`] are updated.
-pub fn update_portal_camera_transform(
+fn update_portal_camera_transform(
     primary_camera_transform_query: Query<
         &GlobalTransform,
         (With<Camera3d>, Without<PortalCamera>),
