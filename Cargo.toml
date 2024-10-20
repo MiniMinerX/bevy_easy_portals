@@ -2,6 +2,7 @@
 name = "bevy_easy_portals"
 version = "0.1.0"
 edition = "2021"
+description = "Bevy plugin for easy-to-use portals."
 keywords = ["bevy", "gamedev"]
 categories = ["game-development"]
 readme = "README.md"
