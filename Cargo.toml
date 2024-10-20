@@ -35,6 +35,9 @@ gizmos = ["bevy/bevy_gizmos"]
 too_many_arguments = "allow"
 type_complexity = "allow"
 
+[package.metadata.docs.rs]
+all-features = true
+
 [[example]]
 name = "basic"
 
