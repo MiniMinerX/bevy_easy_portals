@@ -1,14 +1,14 @@
 # `bevy_easy_portals`
 
-> Easy-to-use portals for Bevy
+Easy-to-use portals for Bevy
 
-![screenshot showing a cube being reflected in a mirror using portals](assets/mirror.png)
+![screenshot showing a cube being reflected in a mirror using portals](https://github.com/chompaa/bevy_easy_portals/blob/main/assets/mirror.png)
 
 ## Getting Started
 
 First, add `PortalPlugin` to your app, then use the `Portal` component, et voila!
 
-See [the examples](https://github.com/chompaa/bevy_easy_portals/examples) for more references.
+See [the examples](https://github.com/chompaa/bevy_easy_portals/tree/main/examples) for more references.
 
 <details>
 
