@@ -7,7 +7,7 @@ keywords = ["bevy", "gamedev"]
 categories = ["game-development"]
 readme = "README.md"
 license = "MIT OR Apache-2.0"
-repository = "https://github.com/bevyengine/bevy"
+repository = "https://github.com/chompaa/bevy_easy_portals"
 documentation = "https://docs.rs/bevy_easy_portals"
 exclude = [".github"]
 
