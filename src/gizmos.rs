@@ -34,10 +34,18 @@ fn debug_portal_meshes(
     }
 }
 /// System that renders arrows indicating the translation and rotation of [`PortalCamera`]s.
-fn debug_portal_cameras(mut gizmos: Gizmos<PortalGizmos>, portal_query: Query<&Portal>) {
+fn debug_portal_cameras(
+    mut gizmos: Gizmos<PortalGizmos>,
+    portal_query: Query<&Portal>,
+    global_transform_query: Query<&GlobalTransform>,
+) {
     for portal in &portal_query {
-        let start = portal.target_transform.translation;
-        let end = start + portal.target_transform.forward() * 0.5;
+        let transform = global_transform_query
+            .get(portal.target)
+            .map(GlobalTransform::compute_transform)
+            .expect("target should have GlobalTransform");
+        let start = transform.translation;
+        let end = start + transform.forward() * 0.5;
         gizmos.arrow(start, end, ORANGE_600);
     }
 }

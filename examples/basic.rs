@@ -36,26 +36,39 @@ fn setup(
         ..default()
     });
 
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::default()),
-        material: materials.add(Color::from(ORANGE_600)),
-        transform: Transform::from_xyz(1.5, 0.0, 0.0),
-        ..default()
-    });
+    let shape = commands
+        .spawn(PbrBundle {
+            mesh: meshes.add(Cuboid::default()),
+            material: materials.add(Color::from(ORANGE_600)),
+            transform: Transform::from_xyz(1.5, 0.0, 0.0),
+            ..default()
+        })
+        .id();
 
-    let portal_transform = Transform::from_xyz(-1.5, 0.0, 0.0);
-    let target_transform = Transform::from_xyz(1.5, 0.0, 2.0);
+    let target_transform = Transform::from_xyz(0.0, 0.0, 2.0);
+    let target = commands
+        .spawn(SpatialBundle::from_transform(target_transform))
+        .id();
+
+    // We'll set the target relative to our shape, since that's what we want to look at
+    commands.entity(shape).add_child(target);
+
     let rectangle = Rectangle::from_size(Vec2::splat(2.5));
-    commands.spawn((
-        meshes.add(rectangle),
-        SpatialBundle::from_transform(portal_transform),
-        Portal::new(primary_camera, target_transform),
-    ));
-    // For the purposes of this example, we'll use a plane with transparency to represent the portal
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(rectangle),
-        material: materials.add(Color::WHITE.with_alpha(0.05)),
-        transform: portal_transform,
-        ..default()
-    });
+    let portal_transform = Transform::from_xyz(-1.5, 0.0, 0.0);
+    commands
+        .spawn((
+            // No need to spawn a material for the mesh here, it will be taken care of by the
+            // portal setup
+            meshes.add(rectangle),
+            SpatialBundle::from_transform(portal_transform),
+            Portal::new(primary_camera, target),
+        ))
+        .with_children(|parent| {
+            // We can use another mesh for our portal if we wish
+            parent.spawn(PbrBundle {
+                mesh: meshes.add(rectangle),
+                material: materials.add(Color::WHITE.with_alpha(0.05)),
+                ..default()
+            });
+        });
 }

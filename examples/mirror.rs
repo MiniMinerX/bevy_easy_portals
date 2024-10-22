@@ -26,9 +26,11 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
+    // It's important we keep track of this entity, since the portal with require it
     let primary_camera = commands
         .spawn(Camera3dBundle {
             camera: Camera {
+                // The portal will inherit properties of the primary camera
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
             },
@@ -37,6 +39,7 @@ fn setup(
         })
         .id();
 
+    // Spawn a shape so we can see something in the reflection
     let shape_transform = Transform::from_xyz(0.0, 0.0, 4.0);
     commands.spawn((
         PbrBundle {
@@ -57,22 +60,37 @@ fn setup(
         ..default()
     });
 
-    let mirror_transform = Transform::default();
-    // The target should be the transform of the mirror itself, but flipped
-    let target_transform = mirror_transform.with_rotation(Quat::from_rotation_y(PI));
     let rectangle = Rectangle::from_size(Vec2::splat(5.0));
-    commands.spawn((
-        meshes.add(rectangle),
-        SpatialBundle::from_transform(mirror_transform),
-        Portal::new(primary_camera, target_transform),
-    ));
-    // For the purposes of this example, we'll use a plane with transparency to represent the mirror
-    commands.spawn(PbrBundle {
-        mesh: meshes.add(rectangle),
-        material: materials.add(Color::WHITE.with_alpha(0.2)),
-        transform: mirror_transform,
-        ..default()
-    });
+
+    let mirror = commands
+        .spawn((
+            // No need to spawn a material for the mesh here, it will be taken care of by the
+            // portal setup
+            meshes.add(rectangle),
+            SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.0, 0.0)),
+        ))
+        .with_children(|parent| {
+            // We can use another mesh for our mirror if we wish
+            parent.spawn(PbrBundle {
+                mesh: meshes.add(rectangle),
+                material: materials.add(Color::WHITE.with_alpha(0.2)),
+                ..default()
+            });
+        })
+        .id();
+
+    // The target should be the transform of the mirror itself, but flipped
+    let target_transform = Transform::default().with_rotation(Quat::from_rotation_y(PI));
+    let target = commands
+        .spawn(SpatialBundle::from_transform(target_transform))
+        .id();
+
+    commands
+        .entity(mirror)
+        // Since we're constructing a mirror, let's parent the target to the mirror itself
+        .add_child(target)
+        // Now let's create the portal!
+        .insert(Portal::new(primary_camera, target));
 }
 
 fn rotate_shape(mut query: Query<&mut Transform, With<Shape>>, time: Res<Time>) {

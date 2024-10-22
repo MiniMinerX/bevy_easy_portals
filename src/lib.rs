@@ -75,12 +75,8 @@ impl Plugin for PortalPlugin {
 pub struct Portal {
     /// The entity with the primary render camera.
     pub primary_camera: Entity,
-    /// The [`Transform`] of this portal's camera.
-    pub target_transform: Transform,
-    /// The [`Entity`] that has this portal's camera.
-    ///
-    /// This is set internally and should not be manually assigned.
-    pub target_camera: Option<Entity>,
+    /// The target entity that should be used to decide the camera's position.
+    pub target: Entity,
     /// Specifies which side of the portal to cull: "front", "back", or neither.
     ///
     /// If set to `None`, both sides of the portal’s mesh will be rendered.
@@ -89,22 +85,27 @@ pub struct Portal {
     // TODO: Can this be remotely reflected upstream now that #6042 has landed?
     #[reflect(ignore)]
     pub cull_mode: Option<Face>,
+    /// The [`Entity`] that has this portal's camera.
+    ///
+    /// This is set internally and should not be manually assigned.
+    pub linked_camera: Option<Entity>,
 }
 
 impl Portal {
-    /// Creates a new [`Portal`] from a given `primary_camera` and `target_transform`.
+    /// Creates a new [`Portal`] from a given `primary_camera` and `target`.
     ///
     /// # See Also
     ///
-    /// * [`Portal::target_transform`]
+    /// * [`Portal::primary_camera`]
+    /// * [`Portal::target`]
     #[inline]
     #[must_use]
-    pub fn new(primary_camera: Entity, target_transform: Transform) -> Self {
+    pub fn new(primary_camera: Entity, target: Entity) -> Self {
         Self {
             primary_camera,
-            target_transform,
+            target,
             cull_mode: Some(Face::Back),
-            target_camera: None,
+            linked_camera: None,
         }
     }
 }
@@ -184,6 +185,7 @@ fn setup_portal(
     )>,
     mut images: ResMut<Assets<Image>>,
     mut portal_materials: ResMut<Assets<PortalMaterial>>,
+    global_transform_query: Query<&GlobalTransform>,
     viewport_size: ViewportSize,
 ) {
     let entity = trigger.entity();
@@ -233,7 +235,11 @@ fn setup_portal(
         images.add(image)
     };
 
-    portal.target_camera = Some(
+    let Ok(global_transform) = global_transform_query.get(portal.target).copied() else {
+        error!("portal target is missing a GlobalTransform");
+        return;
+    };
+    portal.linked_camera = Some(
         commands
             .spawn((
                 Name::new("Portal Camera"),
@@ -246,8 +252,8 @@ fn setup_portal(
                 PortalProjection::default(),
                 VisibleEntities::default(),
                 Frustum::default(),
-                portal.target_transform,
-                GlobalTransform::from(portal.target_transform),
+                global_transform.compute_transform(),
+                global_transform,
                 camera_3d.cloned().unwrap_or_default(),
                 tonemapping.copied().unwrap_or_default(),
                 deband_dither.copied().unwrap_or_default(),
@@ -282,6 +288,10 @@ fn update_portal_camera_transform(
         (&mut GlobalTransform, &mut Transform),
         With<PortalCamera>,
     >,
+    target_global_transform_query: Query<
+        &GlobalTransform,
+        (Without<Camera3d>, Without<PortalCamera>, Without<Portal>),
+    >,
 ) {
     let Ok(primary_camera_transform) = primary_camera_transform_query
         .get_single()
@@ -293,14 +303,17 @@ fn update_portal_camera_transform(
 
     for (portal_global_transform, portal) in &portal_query {
         let Some((mut portal_camera_global_transform, mut portal_camera_transform)) = portal
-            .target_camera
+            .linked_camera
             .and_then(|camera| portal_camera_transform_query.get_mut(camera).ok())
         else {
             continue;
         };
 
         let portal_transform = portal_global_transform.compute_transform();
-        let target_transform = portal.target_transform;
+        let target_transform = target_global_transform_query
+            .get(portal.target)
+            .expect("target should have GlobalTransform")
+            .compute_transform();
 
         let translation = primary_camera_transform.translation - portal_transform.translation
             + target_transform.translation;
@@ -325,10 +338,11 @@ fn update_portal_camera_frusta(
         (&GlobalTransform, &PortalProjection, &mut Frustum),
         With<PortalCamera>,
     >,
+    global_transform_query: Query<&GlobalTransform, Without<PortalCamera>>,
 ) {
     for portal in &portal_query {
         let Some((global_transform, projection, mut frustum)) = portal
-            .target_camera
+            .linked_camera
             .and_then(|camera| frustum_query.get_mut(camera).ok())
         else {
             continue;
@@ -337,7 +351,10 @@ fn update_portal_camera_frusta(
         // Apply `bevy::render::view::update_frusta` as usual
         *frustum = projection.compute_frustum(global_transform);
 
-        let target_transform = portal.target_transform;
+        let target_transform = global_transform_query
+            .get(portal.target)
+            .expect("target should have GlobalTransform")
+            .compute_transform();
 
         // Compute the normal vector for the near clipping plane of the portal camera's frustum.
         //

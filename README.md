@@ -37,25 +37,26 @@ fn setup(
         })
         .id();
 
-    // Where you want the portal to be located
-    let portal_transform = Transform::default();
-
-    // Where the portal's target camera should be
-    let target_transform = Transform::from_xyz(10.0, 0.0, 10.0);
-
     // Spawn something for the portal to look at
-    commands.spawn(PbrBundle {
+    let shape = commands.spawn(PbrBundle {
         mesh: meshes.add(Cuboid::default()),
         material: materials.add(Color::WHITE),
         transform: Transform::from_xyz(10.0, 0.0, 0.0),
         ..default()
-    });
+    }).id();
 
+    // Where the portal's target camera should be
+    let target_transform = Transform::from_xyz(10.0, 0.0, 10.0);
+    let target = commands
+        .spawn(SpatialBundle::from_transform(target_transform))
+        .id();
+    // Where the portal should be located
+    let portal_transform = Transform::default();
     // Spawn the portal, omit a material since one will be added automatically
     commands.spawn((
         meshes.add(Rectangle::default()),
         SpatialBundle::from_transform(portal_transform),
-        Portal::new(primary_camera, target_transform),
+        Portal::new(primary_camera, target),
     ));
 }
 ```
