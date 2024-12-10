@@ -28,37 +28,32 @@ fn setup(
 ) {
     // It's important we keep track of this entity, since the portal with require it
     let primary_camera = commands
-        .spawn(Camera3dBundle {
-            camera: Camera {
+        .spawn((
+            Camera3d::default(),
+            Camera {
                 // The portal will inherit properties of the primary camera
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
             },
-            transform: Transform::from_xyz(2.5, 0.0, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        })
+            Transform::from_xyz(2.5, 0.0, 9.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ))
         .id();
 
     // Spawn a shape so we can see something in the reflection
     let shape_transform = Transform::from_xyz(0.0, 0.0, 4.0);
     commands.spawn((
-        PbrBundle {
-            mesh: meshes.add(Cuboid::default()),
-            material: materials.add(Color::from(ORANGE_600)),
-            transform: shape_transform,
-            ..default()
-        },
+        Mesh3d(meshes.add(Cuboid::default())),
+        MeshMaterial3d(materials.add(Color::from(ORANGE_600))),
+        shape_transform,
         Shape,
     ));
-    commands.spawn(PointLightBundle {
-        point_light: PointLight {
+    commands.spawn((
+        PointLight {
             intensity: 10_000_000.0,
             ..default()
         },
-        transform: Transform::from_xyz(0.0, 10.0, 0.0)
-            .looking_at(shape_transform.translation, Vec3::Y),
-        ..default()
-    });
+        Transform::from_xyz(0.0, 10.0, 0.0).looking_at(shape_transform.translation, Vec3::Y),
+    ));
 
     let rectangle = Rectangle::from_size(Vec2::splat(5.0));
 
@@ -66,24 +61,21 @@ fn setup(
         .spawn((
             // No need to spawn a material for the mesh here, it will be taken care of by the
             // portal setup
-            meshes.add(rectangle),
-            SpatialBundle::from_transform(Transform::from_xyz(0.0, 0.0, 0.0)),
+            Mesh3d(meshes.add(rectangle)),
+            Transform::from_xyz(0.0, 0.0, 0.0),
         ))
         .with_children(|parent| {
             // We can use another mesh for our mirror if we wish
-            parent.spawn(PbrBundle {
-                mesh: meshes.add(rectangle),
-                material: materials.add(Color::WHITE.with_alpha(0.2)),
-                ..default()
-            });
+            parent.spawn((
+                Mesh3d(meshes.add(rectangle)),
+                MeshMaterial3d(materials.add(Color::WHITE.with_alpha(0.2))),
+            ));
         })
         .id();
 
     // The target should be the transform of the mirror itself, but flipped
     let target_transform = Transform::default().with_rotation(Quat::from_rotation_y(PI));
-    let target = commands
-        .spawn(SpatialBundle::from_transform(target_transform))
-        .id();
+    let target = commands.spawn(target_transform).id();
 
     commands
         .entity(mirror)
@@ -93,9 +85,7 @@ fn setup(
         .insert(Portal::new(primary_camera, target));
 }
 
-fn rotate_shape(mut query: Query<&mut Transform, With<Shape>>, time: Res<Time>) {
-    let angle = time.delta_seconds() / 2.0;
-    for mut transform in &mut query {
-        transform.rotate(Quat::from_axis_angle(Vec3::new(1.0, 1.0, 0.0), angle));
-    }
+fn rotate_shape(mut shape_transform: Single<&mut Transform, With<Shape>>, time: Res<Time>) {
+    let angle = time.delta_secs() / 2.0;
+    shape_transform.rotate(Quat::from_axis_angle(Vec3::new(1.0, 1.0, 0.0), angle));
 }

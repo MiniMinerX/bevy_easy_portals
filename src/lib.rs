@@ -2,20 +2,15 @@
 
 #[cfg(feature = "gizmos")]
 pub mod gizmos;
-mod projection;
 
 use bevy::{
-    core_pipeline::{
-        core_3d::graph::Core3d,
-        tonemapping::{DebandDither, Tonemapping},
-    },
+    core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
+    image::{TextureFormatPixelInfo, Volume},
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
     render::{
-        camera::{
-            CameraMainTextureUsages, CameraProjection, CameraRenderGraph, Exposure, RenderTarget,
-        },
+        camera::{Exposure, RenderTarget},
         mesh::MeshVertexBufferLayoutRef,
         primitives::{Frustum, HalfSpace},
         render_resource::{
@@ -23,12 +18,12 @@ use bevy::{
             SpecializedMeshPipelineError, TextureDescriptor, TextureDimension, TextureFormat,
             TextureUsages,
         },
-        texture::{TextureFormatPixelInfo, Volume},
-        view::{ColorGrading, VisibleEntities},
+        view::{ColorGrading, VisibilitySystems},
     },
-    window::{PrimaryWindow, WindowRef},
+    window::{PrimaryWindow, WindowRef, WindowResized},
 };
-use projection::PortalProjection;
+
+const PORTAL_SHADER_PATH: &str = "portal.wgsl";
 
 /// A plugin that provides the required systems to make a [`Portal`] work.
 #[derive(Default)]
@@ -36,31 +31,31 @@ pub struct PortalPlugin;
 
 /// Label for systems that update [`Portal`] related cameras.
 #[derive(Debug, PartialEq, Eq, Clone, Hash, SystemSet)]
-pub enum PortalCameraSystem {
+pub enum PortalCameraSystems {
+    /// Resizes [`Portal::linked_camera`]'s rendered image if any [`WindowResized`] events are read.
+    ResizeImage,
+    /// Updates the [`GlobalTransform`] and [`Transform`] components for [`Portal::linked_camera`]
+    /// based on the [`Portal::primary_camera`]s [`GlobalTransform`].
     UpdateTransform,
+    /// Updates the [`Frustum`] for [`Portal::linked_camera`].
     UpdateFrusta,
 }
 
 impl Plugin for PortalPlugin {
     fn build(&self, app: &mut App) {
-        app.add_plugins((
-            projection::plugin,
-            MaterialPlugin::<PortalMaterial>::default(),
-        ))
-        .add_systems(
-            PostUpdate,
-            (
-                update_portal_camera_transform
+        app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
+            .add_systems(
+                PostUpdate,
+                (
+                    update_portal_camera_transform.in_set(PortalCameraSystems::UpdateTransform),
+                    update_portal_camera_frusta.in_set(PortalCameraSystems::UpdateFrusta),
+                )
                     .after(TransformSystem::TransformPropagate)
-                    .in_set(PortalCameraSystem::UpdateTransform),
-                update_portal_camera_frusta
-                    .in_set(PortalCameraSystem::UpdateFrusta)
-                    .ambiguous_with(PortalCameraSystem::UpdateFrusta),
+                    .before(VisibilitySystems::UpdateFrusta)
+                    .chain(),
             )
-                .chain(),
-        )
-        .observe(setup_portal)
-        .register_type::<(Portal, PortalCamera)>();
+            .add_observer(setup_portal)
+            .register_type::<(Portal, PortalCamera)>();
     }
 }
 
@@ -72,10 +67,15 @@ impl Plugin for PortalPlugin {
 /// A [`PortalMaterial`] is also inserted on the entity, inherting [`Portal::cull_mode`].
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
+#[require(Transform)]
 pub struct Portal {
-    /// The entity with the primary render camera.
+    /// The entity with the primary render [`Camera`].
+    ///
+    /// In other words, the [`Camera`] used to look at this portal.
     pub primary_camera: Entity,
     /// The target entity that should be used to decide the camera's position.
+    ///
+    /// This entity should contain a [`Transform`] component.
     pub target: Entity,
     /// Specifies which side of the portal to cull: "front", "back", or neither.
     ///
@@ -85,7 +85,7 @@ pub struct Portal {
     // TODO: Can this be remotely reflected upstream now that #6042 has landed?
     #[reflect(ignore)]
     pub cull_mode: Option<Face>,
-    /// The [`Entity`] that has this portal's camera.
+    /// The [`Entity`] that has this portal's [`PortalCamera`].
     ///
     /// This is set internally and should not be manually assigned.
     pub linked_camera: Option<Entity>,
@@ -108,11 +108,19 @@ impl Portal {
             linked_camera: None,
         }
     }
+
+    #[inline]
+    #[must_use]
+    pub fn with_cull_mode(mut self, cull_mode: Option<Face>) -> Self {
+        self.cull_mode = cull_mode;
+        self
+    }
 }
 
 /// Component used to mark a [`Portal`]'s associated camera.
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
+#[require(Camera3d)]
 pub struct PortalCamera;
 
 /// Material used for a [`Portal`]'s mesh.
@@ -121,12 +129,12 @@ pub struct PortalCamera;
 pub struct PortalMaterial {
     #[texture(0)]
     #[sampler(1)]
-    color_texture: Option<Handle<Image>>,
+    base_color_texture: Option<Handle<Image>>,
     /// Specifies which side of the portal to cull: "front", "back", or neither.
     ///
     /// If set to `None`, both sides of the portal’s mesh will be rendered.
     ///
-    /// This field is inherited from whatever is set on [`Portal`].
+    /// This field's value is inherited from what is set on [`Portal`], but not kept in sync.
     ///
     /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
     pub cull_mode: Option<Face>,
@@ -134,7 +142,7 @@ pub struct PortalMaterial {
 
 impl Material for PortalMaterial {
     fn fragment_shader() -> ShaderRef {
-        "portal.wgsl".into()
+        PORTAL_SHADER_PATH.into()
     }
 
     fn specialize(
@@ -178,8 +186,8 @@ fn setup_portal(
     primary_camera_query: Query<(
         &Camera,
         Option<&Camera3d>,
-        Option<&Tonemapping>,
         Option<&DebandDither>,
+        Option<&Tonemapping>,
         Option<&ColorGrading>,
         Option<&Exposure>,
     )>,
@@ -192,7 +200,7 @@ fn setup_portal(
 
     let mut portal = portal_query
         .get_mut(entity)
-        .expect("hook guarantees existence of component");
+        .expect("observer guarantees existence of component");
 
     let Ok((primary_camera, camera_3d, tonemapping, deband_dither, color_grading, exposure)) =
         primary_camera_query.get(portal.primary_camera)
@@ -204,14 +212,7 @@ fn setup_portal(
     };
 
     let image_handle = {
-        let Some(size) = viewport_size
-            .get_viewport_size(primary_camera)
-            .map(|size| Extent3d {
-                width: size.x,
-                height: size.y,
-                ..default()
-            })
-        else {
+        let Some(size) = viewport_size.get_viewport_size(primary_camera) else {
             error!("could not compute viewport size for portal {entity}");
             return;
         };
@@ -248,10 +249,6 @@ fn setup_portal(
                     target: RenderTarget::Image(image_handle.clone()),
                     ..primary_camera.clone()
                 },
-                CameraRenderGraph::new(Core3d),
-                PortalProjection::default(),
-                VisibleEntities::default(),
-                Frustum::default(),
                 global_transform.compute_transform(),
                 global_transform,
                 camera_3d.cloned().unwrap_or_default(),
@@ -259,7 +256,6 @@ fn setup_portal(
                 deband_dither.copied().unwrap_or_default(),
                 color_grading.cloned().unwrap_or_default(),
                 exposure.copied().unwrap_or_default(),
-                CameraMainTextureUsages::default(),
                 PortalCamera,
             ))
             .id(),
@@ -267,10 +263,10 @@ fn setup_portal(
 
     commands
         .entity(entity)
-        .insert(portal_materials.add(PortalMaterial {
-            color_texture: Some(image_handle.clone()),
+        .insert(MeshMaterial3d(portal_materials.add(PortalMaterial {
+            base_color_texture: Some(image_handle.clone()),
             cull_mode: portal.cull_mode,
-        }));
+        })));
 }
 
 /// System that updates a [`PortalCamera`]'s translation and rotation based on the primary camera.
@@ -293,26 +289,29 @@ fn update_portal_camera_transform(
         (Without<Camera3d>, Without<PortalCamera>, Without<Portal>),
     >,
 ) {
-    let Ok(primary_camera_transform) = primary_camera_transform_query
-        .get_single()
-        .map(GlobalTransform::compute_transform)
-    else {
-        // A valid camera wasn't entity wasn't provided for the portal
-        return;
-    };
-
     for (portal_global_transform, portal) in &portal_query {
-        let Some((mut portal_camera_global_transform, mut portal_camera_transform)) = portal
-            .linked_camera
-            .and_then(|camera| portal_camera_transform_query.get_mut(camera).ok())
+        let Ok(primary_camera_transform) = primary_camera_transform_query
+            .get(portal.primary_camera)
+            .map(GlobalTransform::compute_transform)
         else {
             continue;
         };
 
+        let Some(linked_camera) = portal.linked_camera else {
+            continue;
+        };
+
+        // `PortalCamera` requires `Camera3d`
+        let (mut portal_camera_global_transform, mut portal_camera_transform) =
+            portal_camera_transform_query
+                .get_mut(linked_camera)
+                .unwrap();
+
         let portal_transform = portal_global_transform.compute_transform();
+        // If the `Portal` has a valid `linked_camera`, this is guaranteed.
         let target_transform = target_global_transform_query
             .get(portal.target)
-            .expect("target should have GlobalTransform")
+            .unwrap()
             .compute_transform();
 
         let translation = primary_camera_transform.translation - portal_transform.translation
@@ -334,53 +333,34 @@ fn update_portal_camera_transform(
 /// [`update_frusta`]: bevy::render::view::update_frusta
 fn update_portal_camera_frusta(
     portal_query: Query<&Portal>,
-    mut frustum_query: Query<
-        (&GlobalTransform, &PortalProjection, &mut Frustum),
-        With<PortalCamera>,
-    >,
-    global_transform_query: Query<&GlobalTransform, Without<PortalCamera>>,
+    mut frustum_query: Query<&mut Frustum, With<PortalCamera>>,
+    global_transform_query: Query<&GlobalTransform>,
 ) {
     for portal in &portal_query {
-        let Some((global_transform, projection, mut frustum)) = portal
-            .linked_camera
-            .and_then(|camera| frustum_query.get_mut(camera).ok())
-        else {
+        let Some(linked_camera) = portal.linked_camera else {
             continue;
         };
 
-        // Apply `bevy::render::view::update_frusta` as usual
-        *frustum = projection.compute_frustum(global_transform);
+        // `PortalCamera` requires `Camera3d`.
+        let mut frustum = frustum_query.get_mut(linked_camera).unwrap();
 
-        let target_transform = global_transform_query
-            .get(portal.target)
-            .expect("target should have GlobalTransform")
-            .compute_transform();
+        // If the `Portal` has a valid `linked_camera`, this is guaranteed.
+        let (target_transform, portal_camera_transform) = global_transform_query
+            .get_many([portal.target, linked_camera])
+            .map(|[t, c]| (t.compute_transform(), c.compute_transform()))
+            .unwrap();
 
-        // Compute the normal vector for the near clipping plane of the portal camera's frustum.
-        //
-        // The near clipping plane is the closest plane to the camera where rendering occurs, which
-        // is usually aligned with the forward direction of the camera.
-        let near_half_space_normal = target_transform.forward();
-
-        // Compute the distance from the portal's exit point (target) to the near clipping plane.
-        //
-        // This allows the near plane to be set precisely at the point where the portal exits,
-        // controlling how close objects can get before they are clipped (disappear) from the
-        // camera's view.
-        let near_half_space_distance = -target_transform
-            .translation
-            .dot(near_half_space_normal.normalize_or_zero());
-
-        // Update the near plane of the frustum with the newly calculated normal vector and
-        // distance.
-        frustum.half_spaces[4] =
-            HalfSpace::new(near_half_space_normal.extend(near_half_space_distance));
+        // Set the near clip plane
+        let normal = -target_transform.forward().normalize_or_zero();
+        let distance =
+            -((target_transform.translation - portal_camera_transform.translation).dot(normal));
+        frustum.half_spaces[4] = HalfSpace::new(normal.extend(distance));
     }
 }
 
 #[derive(SystemParam)]
 struct ViewportSize<'w, 's> {
-    primary_window_query: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    pub primary_window_query: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     window_query: Query<'w, 's, &'static Window>,
 }
 
@@ -389,7 +369,7 @@ impl ViewportSize<'_, '_> {
     ///
     /// Returns [`None`] if no sizing could be obtained, or for any [`RenderTarget`] variant other
     /// than [`RenderTarget::Window`].
-    fn get_viewport_size(&self, camera: &Camera) -> Option<UVec2> {
+    fn get_viewport_size(&self, camera: &Camera) -> Option<Extent3d> {
         match camera.viewport.as_ref() {
             Some(viewport) => Some(viewport.physical_size),
             None => match &camera.target {
@@ -401,5 +381,10 @@ impl ViewportSize<'_, '_> {
                 _ => None,
             },
         }
+        .map(|size| Extent3d {
+            width: size.x,
+            height: size.y,
+            ..default()
+        })
     }
 }

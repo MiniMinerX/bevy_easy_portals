@@ -21,14 +21,14 @@ fn setup(
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
     let primary_camera = commands
-        .spawn(Camera3dBundle {
-            camera: Camera {
+        .spawn((
+            Camera3d::default(),
+            Camera {
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
             },
-            transform: Transform::from_xyz(-3.5, 0.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
-            ..default()
-        })
+            Transform::from_xyz(-3.5, 0.0, 8.0).looking_at(Vec3::ZERO, Vec3::Y),
+        ))
         .id();
 
     commands.insert_resource(AmbientLight {
@@ -37,18 +37,15 @@ fn setup(
     });
 
     let shape = commands
-        .spawn(PbrBundle {
-            mesh: meshes.add(Cuboid::default()),
-            material: materials.add(Color::from(ORANGE_600)),
-            transform: Transform::from_xyz(1.5, 0.0, 0.0),
-            ..default()
-        })
+        .spawn((
+            Mesh3d(meshes.add(Cuboid::default())),
+            MeshMaterial3d(materials.add(Color::from(ORANGE_600))),
+            Transform::from_xyz(1.5, 0.0, 0.0),
+        ))
         .id();
 
     let target_transform = Transform::from_xyz(0.0, 0.0, 2.0);
-    let target = commands
-        .spawn(SpatialBundle::from_transform(target_transform))
-        .id();
+    let target = commands.spawn(target_transform).id();
 
     // We'll set the target relative to our shape, since that's what we want to look at
     commands.entity(shape).add_child(target);
@@ -59,16 +56,15 @@ fn setup(
         .spawn((
             // No need to spawn a material for the mesh here, it will be taken care of by the
             // portal setup
-            meshes.add(rectangle),
-            SpatialBundle::from_transform(portal_transform),
+            Mesh3d(meshes.add(rectangle)),
+            portal_transform,
             Portal::new(primary_camera, target),
         ))
         .with_children(|parent| {
             // We can use another mesh for our portal if we wish
-            parent.spawn(PbrBundle {
-                mesh: meshes.add(rectangle),
-                material: materials.add(Color::WHITE.with_alpha(0.05)),
-                ..default()
-            });
+            parent.spawn((
+                Mesh3d(meshes.add(rectangle)),
+                MeshMaterial3d(materials.add(Color::WHITE.with_alpha(0.05))),
+            ));
         });
 }
