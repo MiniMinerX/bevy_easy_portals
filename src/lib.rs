@@ -400,7 +400,7 @@ fn resize_portal_images(
 
 #[derive(SystemParam)]
 struct ViewportSize<'w, 's> {
-    pub primary_window_query: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
+    primary_window_query: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     window_query: Query<'w, 's, &'static Window>,
 }
 
