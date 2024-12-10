@@ -31,31 +31,24 @@ fn setup(
     mut meshes: ResMut<Assets<Mesh>>,
 ) {
     let primary_camera = commands
-        .spawn(Camera3dBundle {
-            transform: Transform::from_xyz(0.0, 0.0, 10.0),
-            ..default()
-        })
+        .spawn((Camera3d::default(), Transform::from_xyz(0.0, 0.0, 10.0)))
         .id();
 
     // Spawn something for the portal to look at
-    let shape = commands.spawn(PbrBundle {
-        mesh: meshes.add(Cuboid::default()),
-        material: materials.add(Color::WHITE),
-        transform: Transform::from_xyz(10.0, 0.0, 0.0),
-        ..default()
-    }).id();
+    commands.spawn((
+        Mesh3d(meshes.add(Cuboid::default())),
+        MeshMaterial3d(materials.add(Color::WHITE)),
+        Transform::from_xyz(10.0, 0.0, 0.0),
+    ));
 
     // Where the portal's target camera should be
-    let target_transform = Transform::from_xyz(10.0, 0.0, 10.0);
-    let target = commands
-        .spawn(SpatialBundle::from_transform(target_transform))
-        .id();
+    let target = commands.spawn(Transform::from_xyz(10.0, 0.0, 10.0)).id();
     // Where the portal should be located
     let portal_transform = Transform::default();
     // Spawn the portal, omit a material since one will be added automatically
     commands.spawn((
-        meshes.add(Rectangle::default()),
-        SpatialBundle::from_transform(portal_transform),
+        Mesh3d(meshes.add(Rectangle::default())),
+        portal_transform,
         Portal::new(primary_camera, target),
     ));
 }
