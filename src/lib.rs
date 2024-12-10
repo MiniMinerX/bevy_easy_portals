@@ -45,6 +45,10 @@ impl Plugin for PortalPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
             .add_systems(
+                PreUpdate,
+                resize_portal_images.in_set(PortalCameraSystems::ResizeImage),
+            )
+            .add_systems(
                 PostUpdate,
                 (
                     update_portal_camera_transform.in_set(PortalCameraSystems::UpdateTransform),
@@ -355,6 +359,42 @@ fn update_portal_camera_frusta(
         let distance =
             -((target_transform.translation - portal_camera_transform.translation).dot(normal));
         frustum.half_spaces[4] = HalfSpace::new(normal.extend(distance));
+    }
+}
+
+fn resize_portal_images(
+    mut resized_reader: EventReader<WindowResized>,
+    window_query: Query<&Window>,
+    portal_query: Query<(&Portal, &MeshMaterial3d<PortalMaterial>)>,
+    camera_query: Query<&Camera>,
+    mut images: ResMut<Assets<Image>>,
+    mut portal_materials: ResMut<Assets<PortalMaterial>>,
+) {
+    for event in resized_reader.read() {
+        let window_size = window_query.get(event.window).unwrap().physical_size();
+        let size = Extent3d {
+            width: window_size.x,
+            height: window_size.y,
+            ..default()
+        };
+
+        for (portal, portal_material_handle) in &portal_query {
+            let Some(camera) = portal.linked_camera.and_then(|c| camera_query.get(c).ok()) else {
+                continue;
+            };
+
+            let RenderTarget::Image(ref image_handle) = camera.target else {
+                continue;
+            };
+
+            let Some(image) = images.get_mut(image_handle) else {
+                continue;
+            };
+
+            image.resize(size);
+            // Blocked on https://github.com/bevyengine/bevy/issues/5069
+            portal_materials.get_mut(portal_material_handle);
+        }
     }
 }
 
