@@ -2,6 +2,8 @@
 
 #[cfg(feature = "gizmos")]
 pub mod gizmos;
+#[cfg(feature = "picking")]
+pub mod picking;
 
 use bevy::{
     core_pipeline::tonemapping::{DebandDither, Tonemapping},
@@ -125,7 +127,7 @@ impl Portal {
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
 #[require(Camera3d)]
-pub struct PortalCamera;
+pub struct PortalCamera(pub Entity);
 
 /// Material used for a [`Portal`]'s mesh.
 #[derive(Asset, AsBindGroup, Clone, TypePath)]
@@ -260,7 +262,7 @@ fn setup_portal(
                 deband_dither.copied().unwrap_or_default(),
                 color_grading.cloned().unwrap_or_default(),
                 exposure.copied().unwrap_or_default(),
-                PortalCamera,
+                PortalCamera(entity),
             ))
             .id(),
     );
