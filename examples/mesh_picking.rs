@@ -15,10 +15,10 @@ fn main() {
         .add_plugins((
             DefaultPlugins,
             PortalPlugin,
-            MeshPickingPlugin,
             PortalPickingPlugin,
             #[cfg(feature = "gizmos")]
             PortalGizmosPlugin,
+            MeshPickingPlugin,
         ))
         .add_systems(Startup, setup)
         .add_systems(Update, (rotate, draw_mesh_intersections))

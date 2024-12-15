@@ -1,6 +1,9 @@
-//! Portal pick-through functionality for `bevy_picking`.
+//! Portal picking functionality for `bevy_picking`.
 //!
-//! Add the [`PortalPickingPlugin`] to use picking events with [`Portal`] entities.
+//! Add the [`PortalPickingPlugin`] to propagate picking events from backends "through" portals.
+//!
+//! This module does *not* provide any backend for you. It provides custom inputs that are
+//! compatible with any backend.
 
 use bevy::{
     picking::{
@@ -16,16 +19,14 @@ use crate::{Portal, PortalCamera};
 
 const POINTER_UUID: Uuid = Uuid::from_u128(258147812461431762807769092258103654760);
 
-/// Enables picking through [`Portal`]s.
+/// Enables picking "through" [`Portal`]s.
 pub struct PortalPickingPlugin;
 
 impl Plugin for PortalPickingPlugin {
     fn build(&self, app: &mut App) {
         app.add_systems(
             PreUpdate,
-            (pointer_inputs.pipe(propagate_hits))
-                .chain()
-                .in_set(PickSet::Backend),
+            pointer_inputs.pipe(propagate_hits).in_set(PickSet::Backend),
         )
         .add_observer(add_pointer);
     }
