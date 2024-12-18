@@ -6,6 +6,7 @@ pub mod gizmos;
 pub mod picking;
 
 use bevy::{
+    asset::load_internal_asset,
     core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
     image::{TextureFormatPixelInfo, Volume},
@@ -25,7 +26,8 @@ use bevy::{
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
-const PORTAL_SHADER_PATH: &str = "portal.wgsl";
+const PORTAL_SHADER_HANDLE: Handle<Shader> =
+    Handle::weak_from_u128(115090128739399034051596692516865947112);
 
 /// A plugin that provides the required systems to make a [`Portal`] work.
 #[derive(Default)]
@@ -45,6 +47,13 @@ pub enum PortalCameraSystems {
 
 impl Plugin for PortalPlugin {
     fn build(&self, app: &mut App) {
+        load_internal_asset!(
+            app,
+            PORTAL_SHADER_HANDLE,
+            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/portal.wgsl"),
+            Shader::from_wgsl
+        );
+
         app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
             .add_systems(
                 PreUpdate,
@@ -148,7 +157,7 @@ pub struct PortalMaterial {
 
 impl Material for PortalMaterial {
     fn fragment_shader() -> ShaderRef {
-        PORTAL_SHADER_PATH.into()
+        PORTAL_SHADER_HANDLE.into()
     }
 
     fn specialize(
