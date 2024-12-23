@@ -17,8 +17,6 @@ use uuid::Uuid;
 
 use crate::{Portal, PortalCamera};
 
-const POINTER_UUID: Uuid = Uuid::from_u128(258147812461431762807769092258103654760);
-
 /// Enables picking "through" [`Portal`]s.
 pub struct PortalPickingPlugin;
 
@@ -45,7 +43,7 @@ fn add_pointer(
     };
 
     commands.entity(marker.0).insert((
-        PointerId::Custom(POINTER_UUID),
+        PointerId::Custom(Uuid::new_v4()),
         PointerLocation::new(location),
     ));
 }
@@ -61,7 +59,7 @@ fn pointer_inputs(
 
 fn propagate_hits(
     In(pointer_inputs): In<Vec<(PointerId, PointerAction)>>,
-    mut portal_query: Query<(&Portal, &PointerId, &PointerLocation)>,
+    portal_query: Query<(&Portal, &PointerId, &PointerLocation)>,
     global_transform_query: Query<&GlobalTransform>,
     camera_query: Query<&Camera>,
     mut pointer_hits: EventReader<PointerHits>,
@@ -69,37 +67,36 @@ fn propagate_hits(
 ) {
     for hit in pointer_hits.read() {
         for (entity, hit_data) in hit.picks.iter() {
-            // Check if a portal was hit
-            let Ok((portal, portal_pointer_id, portal_pointer_location)) =
-                portal_query.get_mut(*entity)
-            else {
-                continue;
-            };
-
-            let Ok(primary_camera_transform) = global_transform_query.get(portal.primary_camera)
+            // Check if the entity hit was a pickable portal
+            let Ok((portal, &portal_pointer_id, portal_pointer_location)) =
+                portal_query.get(*entity)
             else {
                 continue;
             };
 
             // Get the pointer's location based on the raycast hit
             let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
-            let mut location = portal_pointer_location.location().unwrap().clone();
+            let Ok(primary_camera_transform) = global_transform_query.get(portal.primary_camera)
+            else {
+                continue;
+            };
             let Ok(position) = portal_camera
                 .world_to_viewport(primary_camera_transform, hit_data.position.unwrap())
             else {
                 continue;
             };
-            location.position = position;
+            let target = portal_pointer_location.location().cloned().unwrap().target;
+            let location = Location { target, position };
 
             // Pipe pointer actions
-            for (_pointer_id, action) in pointer_inputs
+            for &(_pointer_id, action) in pointer_inputs
                 .iter()
                 .filter(|(pointer_id, _action)| *pointer_id == hit.pointer)
             {
                 output.send(PointerInput {
-                    pointer_id: *portal_pointer_id,
+                    pointer_id: portal_pointer_id,
                     location: location.clone(),
-                    action: *action,
+                    action,
                 });
             }
         }
