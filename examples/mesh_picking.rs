@@ -98,6 +98,10 @@ fn setup(
                         MeshMaterial3d(idle_material.clone()),
                         Glass,
                         RenderLayers::layer(1),
+                        PickingBehavior {
+                            should_block_lower: false,
+                            is_hoverable: true,
+                        },
                     ))
                     .observe(update_material_on::<Pointer<Over>>(hover_material.clone()))
                     .observe(update_material_on::<Pointer<Out>>(idle_material.clone()));

@@ -3,11 +3,12 @@
 //! Add the [`PortalPickingPlugin`] to propagate picking events from backends "through" portals.
 //!
 //! This module does *not* provide any backend for you. It provides custom inputs that are
-//! compatible with any backend.
+//! compatible with any backend. The entity containing the [`Portal`] will need to be picked via a
+//! backend, hits will then be sent "through" the target.
 
 use bevy::{
     picking::{
-        backend::PointerHits,
+        focus::HoverMap,
         pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
         PickSet,
     },
@@ -22,12 +23,23 @@ pub struct PortalPickingPlugin;
 
 impl Plugin for PortalPickingPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
-            PreUpdate,
-            pointer_inputs.pipe(propagate_hits).in_set(PickSet::Backend),
-        )
-        .add_observer(add_pointer);
+        app.add_event::<PortalInput>()
+            .add_systems(
+                PreUpdate,
+                (
+                    portal_inputs.in_set(PickSet::Input),
+                    portal_hover.in_set(PickSet::PostFocus),
+                ),
+            )
+            .add_observer(add_pointer);
     }
+}
+
+#[derive(Event, Debug)]
+struct PortalInput {
+    pointer_id: PointerId,
+    location: Location,
+    action: PointerAction,
 }
 
 fn add_pointer(
@@ -48,55 +60,76 @@ fn add_pointer(
     ));
 }
 
-fn pointer_inputs(
-    mut pointer_inputs: EventReader<PointerInput>,
-) -> Vec<(PointerId, PointerAction)> {
-    pointer_inputs
-        .read()
-        .map(|p| (p.pointer_id, p.action))
-        .collect()
-}
-
-fn propagate_hits(
-    In(pointer_inputs): In<Vec<(PointerId, PointerAction)>>,
-    portal_query: Query<(&Portal, &PointerId, &PointerLocation)>,
-    global_transform_query: Query<&GlobalTransform>,
-    camera_query: Query<&Camera>,
-    mut pointer_hits: EventReader<PointerHits>,
+fn portal_inputs(
+    mut portal_inputs: EventReader<PortalInput>,
     mut output: EventWriter<PointerInput>,
 ) {
-    for hit in pointer_hits.read() {
-        for (entity, hit_data) in hit.picks.iter() {
-            // Check if the entity hit was a pickable portal
-            let Ok((portal, &portal_pointer_id, portal_pointer_location)) =
+    for event in portal_inputs.read() {
+        output.send(PointerInput {
+            pointer_id: event.pointer_id,
+            location: event.location.clone(),
+            action: event.action,
+        });
+    }
+}
+
+fn portal_hover(
+    portal_query: Query<(&Portal, &Transform, &PointerId, &PointerLocation)>,
+    camera_global_transform_query: Query<(&Camera, &GlobalTransform)>,
+    camera_query: Query<&Camera>,
+    hover_map: Res<HoverMap>,
+    mut pointer_inputs: EventReader<PointerInput>,
+    mut portal_inputs: EventWriter<PortalInput>,
+) {
+    for (hover_pointer_id, hits) in hover_map.iter() {
+        for (entity, _hit_data) in hits.iter() {
+            // Check if the entity hovered was a portal
+            let Ok((portal, &portal_transform, &portal_pointer_id, portal_pointer_location)) =
                 portal_query.get(*entity)
             else {
                 continue;
             };
 
-            // Get the pointer's location based on the raycast hit
             let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
-            let Ok(primary_camera_transform) = global_transform_query.get(portal.primary_camera)
-            else {
-                continue;
-            };
-            let Ok(position) = portal_camera
-                .world_to_viewport(primary_camera_transform, hit_data.position.unwrap())
+            let Ok((primary_camera, primary_camera_transform)) =
+                camera_global_transform_query.get(portal.primary_camera)
             else {
                 continue;
             };
             let target = portal_pointer_location.location().cloned().unwrap().target;
-            let location = Location { target, position };
 
-            // Pipe pointer actions
-            for &(_pointer_id, action) in pointer_inputs
-                .iter()
-                .filter(|(pointer_id, _action)| *pointer_id == hit.pointer)
-            {
-                output.send(PointerInput {
+            for input in pointer_inputs.read() {
+                // We only care about inputs related to the hovering pointer
+                if input.pointer_id != *hover_pointer_id {
+                    continue;
+                }
+
+                // Manually retrieve the current pointer's position, so that it doesn't lag a frame
+                // behind
+                let Ok(ray) = primary_camera
+                    .viewport_to_world(primary_camera_transform, input.location.position)
+                else {
+                    continue;
+                };
+                let Some(distance) = ray.intersect_plane(
+                    portal_transform.translation,
+                    InfinitePlane3d::new(portal_transform.forward()),
+                ) else {
+                    continue;
+                };
+                let Ok(position) = portal_camera
+                    .world_to_viewport(primary_camera_transform, ray.get_point(distance))
+                else {
+                    continue;
+                };
+
+                portal_inputs.send(PortalInput {
                     pointer_id: portal_pointer_id,
-                    location: location.clone(),
-                    action,
+                    location: Location {
+                        target: target.clone(),
+                        position,
+                    },
+                    action: input.action,
                 });
             }
         }
