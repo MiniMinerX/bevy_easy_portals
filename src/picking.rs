@@ -76,91 +76,82 @@ fn portal_inputs(
 
 fn portal_hover(
     portal_query: Query<(&Portal, &Transform, &PointerId, &PointerLocation)>,
-    portal_entities_query: Query<Entity, With<Portal>>,
     camera_global_transform_query: Query<(&Camera, &GlobalTransform)>,
     camera_query: Query<&Camera>,
     hover_map: Res<HoverMap>,
     mut pointer_inputs: EventReader<PointerInput>,
     mut portal_inputs: EventWriter<PortalInput>,
     mut drag_events: EventReader<Pointer<Drag>>,
+    mut drag_end_events: EventReader<Pointer<DragEnd>>,
 ) {
-    // Which portals have not been hovered this frame
-    let mut missing_portals: HashSet<Entity> = HashSet::from_iter(&portal_entities_query);
+    let mut portals: HashSet<(PointerId, Entity)> = HashSet::new();
 
     for (hover_pointer_id, hits) in hover_map.iter() {
         for (entity, _hit_data) in hits.iter() {
-            // Check if the entity hovered was a portal
-            let Ok((portal, &portal_transform, &portal_pointer_id, portal_pointer_location)) =
-                portal_query.get(*entity)
-            else {
-                continue;
-            };
-
-            // This portal was hovered, so we should remove it from this set
-            missing_portals.remove(entity);
-
-            let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
-            let Ok((primary_camera, primary_camera_transform)) =
-                camera_global_transform_query.get(portal.primary_camera)
-            else {
-                continue;
-            };
-            let target = portal_pointer_location.location().cloned().unwrap().target;
-
-            for input in pointer_inputs.read() {
-                // We only care about inputs related to the hovering pointer
-                if input.pointer_id != *hover_pointer_id {
-                    continue;
-                }
-
-                // Manually retrieve the current pointer's position, so that it doesn't lag a frame
-                // behind
-                let Ok(ray) = primary_camera
-                    .viewport_to_world(primary_camera_transform, input.location.position)
-                else {
-                    continue;
-                };
-                let Some(distance) = ray.intersect_plane(
-                    portal_transform.translation,
-                    InfinitePlane3d::new(portal_transform.forward()),
-                ) else {
-                    continue;
-                };
-                let Ok(position) = portal_camera
-                    .world_to_viewport(primary_camera_transform, ray.get_point(distance))
-                else {
-                    continue;
-                };
-
-                portal_inputs.send(PortalInput {
-                    pointer_id: portal_pointer_id,
-                    location: Location {
-                        target: target.clone(),
-                        position,
-                    },
-                    action: input.action,
-                });
+            if portal_query.contains(*entity) {
+                portals.insert((*hover_pointer_id, *entity));
             }
         }
     }
 
-    // Currently, we have only sent pointer inputs for portal pointers if its portal is being
-    // hovered. However, this does not allow for starting a drag inside a portal, and continuing it
-    // when you are outside.
-    //
-    // To solve this, we iterate over every non-hovered portal. If it is currently being
-    // dragged, we send it pointer updates.
+    // Currently, we have only retrieved portal entities if they are being hovered. However, this
+    // does not allow dragging in-and-out of portals.
     for event in drag_events
         .read()
-        .filter(|event| missing_portals.contains(&event.target))
+        .filter(|event| portal_query.contains(event.target))
     {
-        let (_portal, _portal_transform, &portal_pointer_id, portal_pointer_location) =
-            portal_query.get(event.target).unwrap();
-        let location = portal_pointer_location.location().unwrap();
+        portals.insert((event.pointer_id, event.target));
+    }
+    for event in drag_end_events
+        .read()
+        .filter(|event| portal_query.contains(event.target))
+    {
+        portals.insert((event.pointer_id, event.target));
+    }
+
+    for (pointer_id, entity) in portals {
+        let (portal, &portal_transform, &portal_pointer_id, portal_pointer_location) =
+            portal_query.get(entity).unwrap();
+
+        let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
+        let Ok((primary_camera, primary_camera_transform)) =
+            camera_global_transform_query.get(portal.primary_camera)
+        else {
+            continue;
+        };
+        let target = portal_pointer_location.location().cloned().unwrap().target;
+
         for input in pointer_inputs.read() {
+            // We only care about inputs related to the hovering pointer
+            if input.pointer_id != pointer_id {
+                continue;
+            }
+
+            // Manually retrieve the current pointer's position, so that it doesn't lag a frame
+            // behind
+            let Ok(ray) =
+                primary_camera.viewport_to_world(primary_camera_transform, input.location.position)
+            else {
+                continue;
+            };
+            let Some(distance) = ray.intersect_plane(
+                portal_transform.translation,
+                InfinitePlane3d::new(portal_transform.forward()),
+            ) else {
+                continue;
+            };
+            let Ok(position) =
+                portal_camera.world_to_viewport(primary_camera_transform, ray.get_point(distance))
+            else {
+                continue;
+            };
+
             portal_inputs.send(PortalInput {
                 pointer_id: portal_pointer_id,
-                location: location.clone(),
+                location: Location {
+                    target: target.clone(),
+                    position,
+                },
                 action: input.action,
             });
         }
