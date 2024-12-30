@@ -84,11 +84,8 @@ fn portal_hover(
     mut portal_inputs: EventWriter<PortalInput>,
     mut drag_events: EventReader<Pointer<Drag>>,
 ) {
-    let mut portal_entities = HashSet::new();
-
-    for entity in &portal_entities_query {
-        portal_entities.insert(entity);
-    }
+    // Which portals have not been hovered this frame
+    let mut missing_portals: HashSet<Entity> = HashSet::from_iter(&portal_entities_query);
 
     for (hover_pointer_id, hits) in hover_map.iter() {
         for (entity, _hit_data) in hits.iter() {
@@ -99,7 +96,8 @@ fn portal_hover(
                 continue;
             };
 
-            portal_entities.remove(entity);
+            // This portal was hovered, so we should remove it from this set
+            missing_portals.remove(entity);
 
             let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
             let Ok((primary_camera, primary_camera_transform)) =
@@ -146,17 +144,23 @@ fn portal_hover(
         }
     }
 
+    // Currently, we have only sent pointer inputs for portal pointers if its portal is being
+    // hovered. However, this does not allow for starting a drag inside a portal, and continuing it
+    // when you are outside.
+    //
+    // To solve this, we iterate over every non-hovered portal. If it is currently being
+    // dragged, we send it pointer updates.
     for event in drag_events
         .read()
-        .filter(|event| portal_entities.contains(&event.target))
+        .filter(|event| missing_portals.contains(&event.target))
     {
         let (_portal, _portal_transform, &portal_pointer_id, portal_pointer_location) =
             portal_query.get(event.target).unwrap();
-
+        let location = portal_pointer_location.location().unwrap();
         for input in pointer_inputs.read() {
             portal_inputs.send(PortalInput {
                 pointer_id: portal_pointer_id,
-                location: portal_pointer_location.location().unwrap().clone(),
+                location: location.clone(),
                 action: input.action,
             });
         }
