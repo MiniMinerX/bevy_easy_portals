@@ -13,6 +13,7 @@ use bevy::{
         PickSet,
     },
     prelude::*,
+    utils::HashSet,
 };
 use uuid::Uuid;
 
@@ -75,12 +76,20 @@ fn portal_inputs(
 
 fn portal_hover(
     portal_query: Query<(&Portal, &Transform, &PointerId, &PointerLocation)>,
+    portal_entities_query: Query<Entity, With<Portal>>,
     camera_global_transform_query: Query<(&Camera, &GlobalTransform)>,
     camera_query: Query<&Camera>,
     hover_map: Res<HoverMap>,
     mut pointer_inputs: EventReader<PointerInput>,
     mut portal_inputs: EventWriter<PortalInput>,
+    mut drag_events: EventReader<Pointer<Drag>>,
 ) {
+    let mut portal_entities = HashSet::new();
+
+    for entity in &portal_entities_query {
+        portal_entities.insert(entity);
+    }
+
     for (hover_pointer_id, hits) in hover_map.iter() {
         for (entity, _hit_data) in hits.iter() {
             // Check if the entity hovered was a portal
@@ -89,6 +98,8 @@ fn portal_hover(
             else {
                 continue;
             };
+
+            portal_entities.remove(entity);
 
             let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
             let Ok((primary_camera, primary_camera_transform)) =
@@ -132,6 +143,22 @@ fn portal_hover(
                     action: input.action,
                 });
             }
+        }
+    }
+
+    for event in drag_events
+        .read()
+        .filter(|event| portal_entities.contains(&event.target))
+    {
+        let (_portal, _portal_transform, &portal_pointer_id, portal_pointer_location) =
+            portal_query.get(event.target).unwrap();
+
+        for input in pointer_inputs.read() {
+            portal_inputs.send(PortalInput {
+                pointer_id: portal_pointer_id,
+                location: portal_pointer_location.location().unwrap().clone(),
+                action: input.action,
+            });
         }
     }
 }
