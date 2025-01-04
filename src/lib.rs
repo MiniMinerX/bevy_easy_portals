@@ -29,7 +29,7 @@ use bevy::{
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
-const PORTAL_SHADER_HANDLE: Handle<Shader> =
+pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
     Handle::weak_from_u128(115090128739399034051596692516865947112);
 
 /// A plugin that provides the required systems to make a [`Portal`] work.
