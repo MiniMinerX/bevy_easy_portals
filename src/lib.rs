@@ -71,6 +71,7 @@ impl Plugin for PortalPlugin {
                 ),
             )
             .add_observer(setup_portal)
+            .add_observer(despawn_portal_camera)
             .register_type::<(Portal, PortalCamera)>();
     }
 }
@@ -283,6 +284,18 @@ fn setup_portal(
             base_color_texture: Some(image_handle.clone()),
             cull_mode: portal.cull_mode,
         })));
+}
+
+fn despawn_portal_camera(
+    trigger: Trigger<OnRemove, Portal>,
+    portal_query: Query<&Portal>,
+    mut commands: Commands,
+) {
+    let portal = portal_query.get(trigger.entity()).unwrap();
+
+    commands
+        .entity(portal.linked_camera.unwrap())
+        .despawn_recursive();
 }
 
 /// System that updates a [`PortalCamera`]'s translation and rotation based on the primary camera.
