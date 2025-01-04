@@ -315,7 +315,7 @@ fn update_portal_camera_transform(
     >,
     target_global_transform_query: Query<
         &GlobalTransform,
-        (Without<Camera3d>, Without<PortalCamera>, Without<Portal>),
+        (Without<Camera3d>, Without<PortalCamera>),
     >,
 ) {
     for (portal_global_transform, portal) in &portal_query {
