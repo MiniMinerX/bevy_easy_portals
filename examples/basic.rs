@@ -1,13 +1,13 @@
 use bevy::{color::palettes::tailwind::ORANGE_600, prelude::*};
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::PortalGizmosPlugin;
-use bevy_easy_portals::{Portal, PortalPlugin};
+use bevy_easy_portals::{Portal, PortalPlugins};
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            PortalPlugin,
+            PortalPlugins,
             #[cfg(feature = "gizmos")]
             PortalGizmosPlugin,
         ))

@@ -13,11 +13,12 @@ use bevy::{
         PickSet,
     },
     prelude::*,
+    render::camera::NormalizedRenderTarget,
     utils::HashSet,
 };
 use uuid::Uuid;
 
-use crate::{Portal, PortalCamera};
+use crate::{camera::PortalImage, Portal};
 
 /// Enables picking "through" [`Portal`]s.
 pub struct PortalPickingPlugin;
@@ -44,18 +45,18 @@ struct PortalInput {
 }
 
 fn add_pointer(
-    trigger: Trigger<OnAdd, PortalCamera>,
+    trigger: Trigger<OnAdd, PortalImage>,
     mut commands: Commands,
-    query: Query<(&PortalCamera, &Camera)>,
+    query: Query<(Entity, &PortalImage)>,
 ) {
-    let (marker, camera) = query.get(trigger.entity()).unwrap();
+    let (entity, portal_image) = query.get(trigger.entity()).unwrap();
 
     let location = Location {
-        target: camera.target.normalize(None).unwrap(),
+        target: NormalizedRenderTarget::Image(portal_image.0.clone()),
         position: Vec2::ZERO,
     };
 
-    commands.entity(marker.0).insert((
+    commands.entity(entity).insert((
         PointerId::Custom(Uuid::new_v4()),
         PointerLocation::new(location),
     ));

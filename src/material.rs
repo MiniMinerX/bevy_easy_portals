@@ -11,9 +11,13 @@ use bevy::{
             StencilState,
         },
     },
+    window::WindowResized,
 };
 
-use crate::{Portal, PortalCameraSystems, PortalImage};
+use crate::{
+    camera::{PortalCameraSystems, PortalImage},
+    Portal,
+};
 
 pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
     Handle::weak_from_u128(115090128739399034051596692516865947112);
@@ -32,7 +36,9 @@ impl Plugin for PortalMaterialPlugin {
         app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
             .add_systems(
                 PreUpdate,
-                update_materials::<PortalMaterial>.after(PortalCameraSystems::ResizeImage),
+                update_materials::<PortalMaterial>
+                    .run_if(on_event::<WindowResized>)
+                    .after(PortalCameraSystems::ResizeImage),
             )
             .add_observer(spawn_material);
     }

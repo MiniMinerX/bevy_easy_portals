@@ -15,13 +15,13 @@ use bevy::{
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::PortalGizmosPlugin;
-use bevy_easy_portals::{Portal, PortalCameraSystems, PortalPlugin};
+use bevy_easy_portals::{camera::PortalCameraSystems, Portal, PortalPlugins};
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            PortalPlugin,
+            PortalPlugins,
             #[cfg(feature = "gizmos")]
             PortalGizmosPlugin,
         ))
