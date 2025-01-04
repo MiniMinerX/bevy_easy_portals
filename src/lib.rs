@@ -2,35 +2,25 @@
 
 #[cfg(feature = "gizmos")]
 pub mod gizmos;
+pub mod material;
 #[cfg(feature = "picking")]
 pub mod picking;
 
 use bevy::{
-    asset::load_internal_asset,
-    core_pipeline::{
-        core_3d::CORE_3D_DEPTH_FORMAT,
-        tonemapping::{DebandDither, Tonemapping},
-    },
+    core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
     image::{TextureFormatPixelInfo, Volume},
-    pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
     render::{
         camera::{Exposure, RenderTarget},
-        mesh::MeshVertexBufferLayoutRef,
         primitives::{Frustum, HalfSpace},
         render_resource::{
-            AsBindGroup, CompareFunction, DepthBiasState, DepthStencilState, Extent3d, Face,
-            RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, StencilFaceState,
-            StencilState, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
+            Extent3d, Face, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
         view::{ColorGrading, VisibilitySystems},
     },
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
-
-pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(115090128739399034051596692516865947112);
 
 /// A plugin that provides the required systems to make a [`Portal`] work.
 #[derive(Default)]
@@ -50,14 +40,7 @@ pub enum PortalCameraSystems {
 
 impl Plugin for PortalPlugin {
     fn build(&self, app: &mut App) {
-        load_internal_asset!(
-            app,
-            PORTAL_SHADER_HANDLE,
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/portal.wgsl"),
-            Shader::from_wgsl
-        );
-
-        app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
+        app.add_plugins(material::PortalMaterialPlugin)
             .add_systems(
                 PreUpdate,
                 resize_portal_images.in_set(PortalCameraSystems::ResizeImage),
@@ -75,7 +58,7 @@ impl Plugin for PortalPlugin {
             )
             .add_observer(setup_portal)
             .add_observer(despawn_portal_camera)
-            .register_type::<(Portal, PortalCamera)>();
+            .register_type::<(Portal, PortalCamera, PortalImage)>();
     }
 }
 
@@ -143,85 +126,10 @@ impl Portal {
 #[require(Camera3d)]
 pub struct PortalCamera(pub Entity);
 
-/// Material used for a [`Portal`]'s mesh.
-#[derive(Asset, AsBindGroup, Clone, TypePath)]
-#[bind_group_data(PortalMaterialKey)]
-pub struct PortalMaterial {
-    #[texture(0)]
-    #[sampler(1)]
-    base_color_texture: Option<Handle<Image>>,
-    /// Specifies which side of the portal to cull: "front", "back", or neither.
-    ///
-    /// If set to `None`, both sides of the portal’s mesh will be rendered.
-    ///
-    /// This field's value is inherited from what is set on [`Portal`], but not kept in sync.
-    ///
-    /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
-    pub cull_mode: Option<Face>,
-    /// The effect of draw calls on the depth and stencil aspects of the portal.
-    ///
-    /// Defaults to the standard mesh [`DepthStencilState`] but with a [`DepthBiasState`] of
-    /// `constant = 1` and `slope_scale = 1.0`. This is used to solve z-fighting when a portal is
-    /// inside another mesh.
-    pub depth_stencil: Option<DepthStencilState>,
-}
-
-impl Default for PortalMaterial {
-    fn default() -> Self {
-        Self {
-            base_color_texture: None,
-            cull_mode: Some(Face::Back),
-            depth_stencil: Some(DepthStencilState {
-                format: CORE_3D_DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::GreaterEqual,
-                stencil: StencilState {
-                    front: StencilFaceState::IGNORE,
-                    back: StencilFaceState::IGNORE,
-                    read_mask: 0,
-                    write_mask: 0,
-                },
-                bias: DepthBiasState {
-                    constant: 1,
-                    slope_scale: 1.0,
-                    clamp: 0.0,
-                },
-            }),
-        }
-    }
-}
-
-impl Material for PortalMaterial {
-    fn fragment_shader() -> ShaderRef {
-        PORTAL_SHADER_HANDLE.into()
-    }
-
-    fn specialize(
-        _pipeline: &MaterialPipeline<Self>,
-        descriptor: &mut RenderPipelineDescriptor,
-        _layout: &MeshVertexBufferLayoutRef,
-        key: MaterialPipelineKey<Self>,
-    ) -> Result<(), SpecializedMeshPipelineError> {
-        descriptor.primitive.cull_mode = key.bind_group_data.cull_mode;
-        descriptor.depth_stencil = key.bind_group_data.depth_stencil;
-        Ok(())
-    }
-}
-
-#[derive(Clone, PartialEq, Eq, Hash)]
-pub struct PortalMaterialKey {
-    cull_mode: Option<Face>,
-    depth_stencil: Option<DepthStencilState>,
-}
-
-impl From<&PortalMaterial> for PortalMaterialKey {
-    fn from(material: &PortalMaterial) -> Self {
-        Self {
-            cull_mode: material.cull_mode,
-            depth_stencil: material.depth_stencil.clone(),
-        }
-    }
-}
+/// Component used to store a weak reference to a [`PortalCamera`]'s rendered image.
+#[derive(Component, Reflect, Debug, Deref, DerefMut)]
+#[reflect(Component)]
+pub struct PortalImage(pub Handle<Image>);
 
 /// System that is triggered whenever a [`Portal`] component is added to an entity.
 ///
@@ -246,7 +154,7 @@ fn setup_portal(
         Option<&Exposure>,
     )>,
     mut images: ResMut<Assets<Image>>,
-    mut portal_materials: ResMut<Assets<PortalMaterial>>,
+    // mut portal_materials: ResMut<Assets<PortalMaterial>>,
     global_transform_query: Query<&GlobalTransform>,
     viewport_size: ViewportSize,
 ) {
@@ -317,11 +225,7 @@ fn setup_portal(
 
     commands
         .entity(entity)
-        .insert(MeshMaterial3d(portal_materials.add(PortalMaterial {
-            base_color_texture: Some(image_handle.clone()),
-            cull_mode: portal.cull_mode,
-            ..default()
-        })));
+        .insert(PortalImage(image_handle.clone_weak()));
 }
 
 fn despawn_portal_camera(
@@ -423,10 +327,8 @@ fn update_portal_camera_frusta(
 fn resize_portal_images(
     mut resized_reader: EventReader<WindowResized>,
     window_query: Query<&Window>,
-    portal_query: Query<(&Portal, &MeshMaterial3d<PortalMaterial>)>,
-    camera_query: Query<&Camera>,
+    portal_image_query: Query<&PortalImage>,
     mut images: ResMut<Assets<Image>>,
-    mut portal_materials: ResMut<Assets<PortalMaterial>>,
 ) {
     for event in resized_reader.read() {
         let window_size = window_query.get(event.window).unwrap().physical_size();
@@ -436,22 +338,12 @@ fn resize_portal_images(
             ..default()
         };
 
-        for (portal, portal_material_handle) in &portal_query {
-            let Some(camera) = portal.linked_camera.and_then(|c| camera_query.get(c).ok()) else {
-                continue;
-            };
-
-            let RenderTarget::Image(ref image_handle) = camera.target else {
-                continue;
-            };
-
-            let Some(image) = images.get_mut(image_handle) else {
+        for portal_image in &portal_image_query {
+            let Some(image) = images.get_mut(&portal_image.0) else {
                 continue;
             };
 
             image.resize(size);
-            // Blocked on https://github.com/bevyengine/bevy/issues/5069
-            portal_materials.get_mut(portal_material_handle);
         }
     }
 }
