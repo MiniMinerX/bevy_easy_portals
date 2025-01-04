@@ -7,7 +7,10 @@ pub mod picking;
 
 use bevy::{
     asset::load_internal_asset,
-    core_pipeline::tonemapping::{DebandDither, Tonemapping},
+    core_pipeline::{
+        core_3d::CORE_3D_DEPTH_FORMAT,
+        tonemapping::{DebandDither, Tonemapping},
+    },
     ecs::system::SystemParam,
     image::{TextureFormatPixelInfo, Volume},
     pbr::{MaterialPipeline, MaterialPipelineKey},
@@ -17,9 +20,9 @@ use bevy::{
         mesh::MeshVertexBufferLayoutRef,
         primitives::{Frustum, HalfSpace},
         render_resource::{
-            AsBindGroup, Extent3d, Face, RenderPipelineDescriptor, ShaderRef,
-            SpecializedMeshPipelineError, TextureDescriptor, TextureDimension, TextureFormat,
-            TextureUsages,
+            AsBindGroup, CompareFunction, DepthBiasState, DepthStencilState, Extent3d, Face,
+            RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, StencilFaceState,
+            StencilState, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
         view::{ColorGrading, VisibilitySystems},
     },
@@ -155,6 +158,37 @@ pub struct PortalMaterial {
     ///
     /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
     pub cull_mode: Option<Face>,
+    /// The effect of draw calls on the depth and stencil aspects of the portal.
+    ///
+    /// Defaults to the standard mesh [`DepthStencilState`] but with a [`DepthBiasState`] of
+    /// `constant = 1` and `slope_scale = 1.0`. This is used to solve z-fighting when a portal is
+    /// inside another mesh.
+    pub depth_stencil: Option<DepthStencilState>,
+}
+
+impl Default for PortalMaterial {
+    fn default() -> Self {
+        Self {
+            base_color_texture: None,
+            cull_mode: Some(Face::Back),
+            depth_stencil: Some(DepthStencilState {
+                format: CORE_3D_DEPTH_FORMAT,
+                depth_write_enabled: true,
+                depth_compare: CompareFunction::GreaterEqual,
+                stencil: StencilState {
+                    front: StencilFaceState::IGNORE,
+                    back: StencilFaceState::IGNORE,
+                    read_mask: 0,
+                    write_mask: 0,
+                },
+                bias: DepthBiasState {
+                    constant: 1,
+                    slope_scale: 1.0,
+                    clamp: 0.0,
+                },
+            }),
+        }
+    }
 }
 
 impl Material for PortalMaterial {
@@ -169,6 +203,7 @@ impl Material for PortalMaterial {
         key: MaterialPipelineKey<Self>,
     ) -> Result<(), SpecializedMeshPipelineError> {
         descriptor.primitive.cull_mode = key.bind_group_data.cull_mode;
+        descriptor.depth_stencil = key.bind_group_data.depth_stencil;
         Ok(())
     }
 }
@@ -176,12 +211,14 @@ impl Material for PortalMaterial {
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub struct PortalMaterialKey {
     cull_mode: Option<Face>,
+    depth_stencil: Option<DepthStencilState>,
 }
 
 impl From<&PortalMaterial> for PortalMaterialKey {
     fn from(material: &PortalMaterial) -> Self {
         Self {
             cull_mode: material.cull_mode,
+            depth_stencil: material.depth_stencil.clone(),
         }
     }
 }
@@ -283,6 +320,7 @@ fn setup_portal(
         .insert(MeshMaterial3d(portal_materials.add(PortalMaterial {
             base_color_texture: Some(image_handle.clone()),
             cull_mode: portal.cull_mode,
+            ..default()
         })));
 }
 
