@@ -62,12 +62,13 @@ impl Plugin for PortalPlugin {
             .add_systems(
                 PostUpdate,
                 (
-                    update_portal_camera_transform.in_set(PortalCameraSystems::UpdateTransform),
-                    update_portal_camera_frusta.in_set(PortalCameraSystems::UpdateFrusta),
-                )
-                    .after(TransformSystem::TransformPropagate)
-                    .before(VisibilitySystems::UpdateFrusta)
-                    .chain(),
+                    update_portal_camera_transform
+                        .after(TransformSystem::TransformPropagate)
+                        .in_set(PortalCameraSystems::UpdateTransform),
+                    update_portal_camera_frusta
+                        .after(VisibilitySystems::UpdateFrusta)
+                        .in_set(PortalCameraSystems::UpdateFrusta),
+                ),
             )
             .add_observer(setup_portal)
             .register_type::<(Portal, PortalCamera)>();
@@ -344,8 +345,6 @@ fn update_portal_camera_transform(
 }
 
 /// System that updates [`Frustum`] for [`PortalCamera`]s.
-///
-/// [`update_frusta`]: bevy::render::view::update_frusta
 fn update_portal_camera_frusta(
     portal_query: Query<&Portal>,
     mut frustum_query: Query<&mut Frustum, With<PortalCamera>>,
@@ -360,15 +359,12 @@ fn update_portal_camera_frusta(
         let mut frustum = frustum_query.get_mut(linked_camera).unwrap();
 
         // If the `Portal` has a valid `linked_camera`, this is guaranteed.
-        let (target_transform, portal_camera_transform) = global_transform_query
-            .get_many([portal.target, linked_camera])
-            .map(|[t, c]| (t.compute_transform(), c.compute_transform()))
-            .unwrap();
+        let target_transform = global_transform_query.get(portal.target).unwrap();
 
-        // Set the near clip plane
-        let normal = -target_transform.forward().normalize_or_zero();
-        let distance =
-            -((target_transform.translation - portal_camera_transform.translation).dot(normal));
+        let normal = target_transform.forward();
+        let distance = -target_transform
+            .translation()
+            .dot(normal.normalize_or_zero());
         frustum.half_spaces[4] = HalfSpace::new(normal.extend(distance));
     }
 }
