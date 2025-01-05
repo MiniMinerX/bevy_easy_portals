@@ -80,12 +80,12 @@ fn portal_hover(
     camera_global_transform_query: Query<(&Camera, &GlobalTransform)>,
     camera_query: Query<&Camera>,
     hover_map: Res<HoverMap>,
+    pointer_state: Res<PointerState>,
     mut pointer_inputs: EventReader<PointerInput>,
     mut portal_inputs: EventWriter<PortalInput>,
-    mut drag_events: EventReader<Pointer<Drag>>,
-    mut drag_end_events: EventReader<Pointer<DragEnd>>,
+    mut dragged_last_frame: Local<HashSet<(PointerId, Entity)>>,
 ) {
-    let mut portals: HashSet<(PointerId, Entity)> = HashSet::new();
+    let mut portals: HashSet<(PointerId, Entity)> = dragged_last_frame.drain().collect();
 
     for (hover_pointer_id, hits) in hover_map.iter() {
         for (entity, _hit_data) in hits.iter() {
@@ -97,17 +97,15 @@ fn portal_hover(
 
     // Currently, we have only retrieved portal entities if they are being hovered. However, this
     // does not allow dragging in-and-out of portals.
-    for event in drag_events
-        .read()
-        .filter(|event| portal_query.contains(event.target))
-    {
-        portals.insert((event.pointer_id, event.target));
-    }
-    for event in drag_end_events
-        .read()
-        .filter(|event| portal_query.contains(event.target))
-    {
-        portals.insert((event.pointer_id, event.target));
+    for ((pointer_id, _pointer_button), pointer_state) in pointer_state.pointer_buttons.iter() {
+        for &target in pointer_state
+            .dragging
+            .keys()
+            .filter(|&entity| portal_query.contains(*entity))
+        {
+            dragged_last_frame.insert((*pointer_id, target));
+            portals.insert((*pointer_id, target));
+        }
     }
 
     for (pointer_id, entity) in portals {
