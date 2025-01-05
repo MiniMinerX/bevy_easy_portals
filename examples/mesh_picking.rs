@@ -1,20 +1,20 @@
 use std::f32::consts::FRAC_PI_4;
 
 use bevy::{
-    color::palettes::tailwind::{AMBER_600, VIOLET_400},
+    color::palettes::tailwind::{SKY_200, VIOLET_400},
     picking::pointer::PointerInteraction,
     prelude::*,
     render::view::RenderLayers,
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::{PortalGizmos, PortalGizmosPlugin};
-use bevy_easy_portals::{picking::PortalPickingPlugin, Portal, PortalPlugin};
+use bevy_easy_portals::{picking::PortalPickingPlugin, Portal, PortalPlugins};
 
 fn main() {
     App::new()
         .add_plugins((
             DefaultPlugins,
-            PortalPlugin,
+            PortalPlugins,
             PortalPickingPlugin,
             #[cfg(feature = "gizmos")]
             PortalGizmosPlugin,
@@ -57,7 +57,7 @@ fn setup(
         ..default()
     });
 
-    let idle_material = materials.add(Color::from(AMBER_600));
+    let idle_material = materials.add(Color::from(SKY_200));
     let drag_material = materials.add(Color::from(VIOLET_400));
 
     commands
@@ -66,12 +66,12 @@ fn setup(
             MeshMaterial3d(idle_material.clone()),
             Transform::from_xyz(0.0, 0.0, 0.0).with_rotation(Quat::from_rotation_z(-FRAC_PI_4)),
         ))
-        .observe(rotate_on_drag)
+        .observe(rotate_xy_on_drag)
         .observe(update_material_on::<Pointer<DragStart>>(drag_material))
         .observe(update_material_on::<Pointer<DragEnd>>(idle_material));
 
     let target = commands.spawn(Transform::from_xyz(0.0, 0.0, 2.0)).id();
-    let rectangle = Rectangle::from_size(Vec2::splat(2.5));
+    let rectangle = Cuboid::from_size(Vec3::splat(2.0));
 
     let idle_material = materials.add(Color::WHITE.with_alpha(0.01));
     let hover_material = materials.add(Color::WHITE.with_alpha(0.04));
@@ -86,6 +86,7 @@ fn setup(
                 portal_transform,
                 Portal::new(primary_camera, target),
                 RenderLayers::layer(1),
+                // We want to be able to hover the glass
                 PickingBehavior {
                     should_block_lower: false,
                     is_hoverable: true,
@@ -98,6 +99,7 @@ fn setup(
                         MeshMaterial3d(idle_material.clone()),
                         Glass,
                         RenderLayers::layer(1),
+                        // Similarly, we want to be able to hover the portal (to pick through)
                         PickingBehavior {
                             should_block_lower: false,
                             is_hoverable: true,
@@ -105,7 +107,8 @@ fn setup(
                     ))
                     .observe(update_material_on::<Pointer<Over>>(hover_material.clone()))
                     .observe(update_material_on::<Pointer<Out>>(idle_material.clone()));
-            });
+            })
+            .observe(rotate_y_on_drag);
     }
 }
 
@@ -127,14 +130,30 @@ fn draw_mesh_intersections(
     for (point, normal) in pointers
         .iter()
         .flat_map(|interaction| interaction.iter())
-        .filter(|(entity, _hit)| !untargetable.contains(*entity))
-        .filter_map(|(_entity, hit)| hit.position.zip(hit.normal))
+        .filter_map(|(entity, hit)| {
+            if !untargetable.contains(*entity) {
+                hit.position.zip(hit.normal)
+            } else {
+                None
+            }
+        })
     {
         gizmos.arrow(point, point + normal.normalize() * 0.5, Color::WHITE);
     }
 }
 
-fn rotate_on_drag(drag: Trigger<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
+fn rotate_y_on_drag(drag: Trigger<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
+    if !matches!(drag.button, PointerButton::Secondary) {
+        return;
+    }
+    let mut transform = transform_query.get_mut(drag.entity()).unwrap();
+    transform.rotate_y(drag.delta.x * 0.005);
+}
+
+fn rotate_xy_on_drag(drag: Trigger<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
+    if !matches!(drag.button, PointerButton::Primary) {
+        return;
+    }
     let mut transform = transform_query.get_mut(drag.entity()).unwrap();
     transform.rotate_y(drag.delta.x * 0.02);
     transform.rotate_x(drag.delta.y * 0.02);
