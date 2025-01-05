@@ -16,11 +16,11 @@ See [the examples](https://github.com/chompaa/bevy_easy_portals/tree/main/exampl
 
 ```rust
 use bevy::prelude::*;
-use bevy_easy_portals::{Portal, PortalPlugin}
+use bevy_easy_portals::{Portal, PortalPlugins}
 
 fn main() {
     App::new()
-        .add_plugins((DefaultPlugins, PortalPlugin))
+        .add_plugins((DefaultPlugins, PortalPlugins))
         .add_systems(Startup, setup)
         .run();
 }
@@ -65,9 +65,10 @@ fn setup(
 
 ## Features
 
-| Feature                | Description                                           |
-| :--                    | :--                                                   |
-| `gizmos`               | Use gizmos for the portal's aabb and camera transform |
+| Feature                | Description                                                       |
+| :--                    | :--                                                               |
+| `picking`              | Support picking through portals with using your favourite backend |
+| `gizmos`               | Use gizmos for the portal's aabb and camera transform             |
 
 ## Contributing
 
