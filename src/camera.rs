@@ -1,3 +1,5 @@
+use std::f32::consts::PI;
+
 use bevy::{
     core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
@@ -174,61 +176,45 @@ fn despawn_portal_camera(
         .despawn_recursive();
 }
 
-/// System that updates a [`PortalCamera`]'s translation and rotation based on the primary camera.
-///
-/// # Notes
-///
-/// * Both [`Transform`] and [`GlobalTransform`] are updated.
+/// System that updates a [`PortalCamera`]s [`Transform`] and [`GlobalTransform`] based on the
+/// primary camera.
 fn update_portal_camera_transform(
-    primary_camera_transform_query: Query<
-        &GlobalTransform,
-        (With<Camera3d>, Without<PortalCamera>),
-    >,
     portal_query: Query<(&GlobalTransform, &Portal), (Without<Camera3d>, Without<PortalCamera>)>,
     mut portal_camera_transform_query: Query<
         (&mut GlobalTransform, &mut Transform),
         With<PortalCamera>,
     >,
-    target_global_transform_query: Query<
-        &GlobalTransform,
-        (Without<Camera3d>, Without<PortalCamera>),
-    >,
+    global_transform_query: Query<&GlobalTransform, Without<PortalCamera>>,
 ) {
-    for (portal_global_transform, portal) in &portal_query {
-        let Ok(primary_camera_transform) = primary_camera_transform_query
-            .get(portal.primary_camera)
-            .map(GlobalTransform::compute_transform)
+    for (portal_transform, portal) in &portal_query {
+        let Ok([primary_camera_transform, target_transform]) =
+            global_transform_query.get_many([portal.primary_camera, portal.target])
         else {
             continue;
         };
 
-        let Some(linked_camera) = portal.linked_camera else {
+        let Some((mut portal_camera_global_transform, mut portal_camera_transform)) = portal
+            .linked_camera
+            .and_then(|camera| portal_camera_transform_query.get_mut(camera).ok())
+        else {
             continue;
         };
 
-        // `PortalCamera` requires `Camera3d`
-        let (mut portal_camera_global_transform, mut portal_camera_transform) =
-            portal_camera_transform_query
-                .get_mut(linked_camera)
-                .unwrap();
-
-        let portal_transform = portal_global_transform.compute_transform();
-        // If the `Portal` has a valid `linked_camera`, this is guaranteed.
-        let target_transform = target_global_transform_query
-            .get(portal.target)
-            .unwrap()
-            .compute_transform();
-
-        let translation = primary_camera_transform.translation - portal_transform.translation
-            + target_transform.translation;
-
-        let rotation = portal_transform
-            .rotation
+        // Transform the camera's translation from world space to the portal's space
+        let relative_translation = portal_transform
+            .affine()
             .inverse()
-            .mul_quat(target_transform.rotation);
+            .transform_point3(primary_camera_transform.translation());
+        // Now transform it back to world space using the target's transform
+        let translation = target_transform.transform_point(relative_translation);
 
-        *portal_camera_transform = primary_camera_transform.with_translation(translation);
-        portal_camera_transform.rotate_around(target_transform.translation, rotation);
+        let relative_rotation =
+            portal_transform.rotation().inverse() * primary_camera_transform.rotation();
+        let rotation = target_transform.rotation() * relative_rotation;
+
+        portal_camera_transform.translation = translation;
+        portal_camera_transform.rotation = rotation;
+
         *portal_camera_global_transform = GlobalTransform::from(*portal_camera_transform);
     }
 }
