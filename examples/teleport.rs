@@ -70,10 +70,6 @@ impl Default for CameraController {
     }
 }
 
-// Component used to mark the portal's exit
-#[derive(Component)]
-struct Link(Entity);
-
 // Component used to track collisions between an entity and portal
 #[derive(Component, Clone, Copy)]
 #[component(storage = "SparseSet")]
@@ -135,9 +131,9 @@ fn setup(
     let portal_mesh = meshes.add(Rectangle::from_size(Vec2::splat(PORTAL_MESH_SIZE)));
     let wall_mesh = meshes.add(Cuboid::from_size(Vec3::splat(WALL_MESH_SIZE)));
 
-    for (sign, color, portal, other, target) in [
-        (-1.0, SKY_200, portal_a, portal_b, target_b),
-        (1.0, SLATE_200, portal_b, portal_a, target_a),
+    for (sign, color, portal, target) in [
+        (-1.0, SKY_200, portal_a, target_b),
+        (1.0, SLATE_200, portal_b, target_a),
     ] {
         // Floor
         commands.spawn((
@@ -175,9 +171,13 @@ fn setup(
                 Mesh3d(portal_mesh.clone()),
                 portal_transform,
                 // The mesh is a `Rectangle`, so to allow for the portal to be seen from both
-                // sides, don't cull any of its faces
-                Portal::new(primary_camera, target).with_cull_mode(None),
-                Link(other),
+                // sides, don't cull any of its faces.
+                //
+                // We should also flip the near plane normal when we are looking at the portal's
+                // back face.
+                Portal::new(primary_camera, target)
+                    .with_cull_mode(None)
+                    .with_conditionally_flip_near_plane_normal(true),
                 // Stop portals from recursively rendering eachother
                 RenderLayers::layer(1),
             ))
@@ -197,23 +197,23 @@ fn setup(
 fn handle_portal_collision(
     mut commands: Commands,
     mut camera_query: Query<(Entity, &mut Transform), With<CameraController>>,
-    portal_query: Query<(Entity, &Link), With<Portal>>,
-    transform_query: Query<&Transform, Without<CameraController>>,
+    portal_query: Query<(Entity, &Portal), With<Portal>>,
+    transform_query: Query<&GlobalTransform, Without<CameraController>>,
     mut stored_collision: Option<Single<&mut Collision>>,
 ) {
     let (camera_entity, mut camera_transform) = camera_query.get_single_mut().unwrap();
     let camera_aabb = Aabb3d::new(camera_transform.translation, Vec3::ZERO);
 
-    for (portal_entity, link) in &portal_query {
+    for (portal_entity, portal) in &portal_query {
         let portal_transform = transform_query.get(portal_entity).unwrap();
         let portal_aabb = Aabb3d::new(
-            portal_transform.translation,
+            portal_transform.translation(),
             Vec2::splat(PORTAL_MESH_SIZE).extend(1.0),
         );
 
         // Are we currently inside a portal?
         if portal_aabb.intersects(&camera_aabb) {
-            let offset = camera_transform.translation - portal_transform.translation;
+            let offset = camera_transform.translation - portal_transform.translation();
 
             let Some(ref mut collision) = stored_collision else {
                 commands.entity(camera_entity).insert(Collision {
@@ -230,14 +230,21 @@ fn handle_portal_collision(
 
                 // Have we moved to the other side of the portal?
                 if start_side != end_side {
-                    let target_transform = transform_query.get(link.0).unwrap();
-                    let relative_translation = portal_transform.rotation.inverse()
-                        * (camera_transform.translation - portal_transform.translation);
+                    let target_transform = transform_query.get(portal.target).unwrap();
+
+                    let relative_translation = portal_transform
+                        .affine()
+                        .inverse()
+                        .transform_point3(camera_transform.translation);
+                    // Now transform it back to world space using the target's transform
+                    let translation = target_transform.transform_point(relative_translation);
+
                     let relative_rotation =
-                        portal_transform.rotation.inverse() * camera_transform.rotation;
-                    camera_transform.translation = target_transform.translation
-                        + (target_transform.rotation * relative_translation);
-                    camera_transform.rotation = target_transform.rotation * relative_rotation;
+                        portal_transform.rotation().inverse() * camera_transform.rotation;
+                    let rotation = target_transform.rotation() * relative_rotation;
+
+                    camera_transform.translation = translation;
+                    camera_transform.rotation = rotation;
                 } else {
                     collision.offset = offset;
                 }
