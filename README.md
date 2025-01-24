@@ -60,14 +60,14 @@ fn setup(
 
 | `bevy_easy_portals` | `bevy` |
 | :--                 | :--    |
-| `0.3`               | `0.15` |
+| `0.3..0.4`          | `0.15` |
 | `0.1..0.2`          | `0.14` |
 
 ## Features
 
 | Feature                | Description                                                       |
 | :--                    | :--                                                               |
-| `picking`              | Support picking through portals with using your favourite backend |
+| `picking`              | Support picking through portals with using your favorite backend  |
 | `gizmos`               | Use gizmos for the portal's aabb and camera transform             |
 
 ## Contributing
