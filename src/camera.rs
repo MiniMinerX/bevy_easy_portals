@@ -1,5 +1,3 @@
-use std::f32::consts::PI;
-
 use bevy::{
     core_pipeline::tonemapping::{DebandDither, Tonemapping},
     ecs::system::SystemParam,
@@ -36,19 +34,23 @@ pub enum PortalCameraSystems {
 
 impl Plugin for PortalCameraPlugin {
     fn build(&self, app: &mut App) {
-        app.add_systems(
+        app.configure_sets(
+            PostUpdate,
+            (
+                PortalCameraSystems::UpdateTransform.after(TransformSystem::TransformPropagate),
+                PortalCameraSystems::UpdateFrusta.after(VisibilitySystems::UpdateFrusta),
+            )
+                .chain(),
+        )
+        .add_systems(
             PreUpdate,
             resize_portal_images.in_set(PortalCameraSystems::ResizeImage),
         )
         .add_systems(
             PostUpdate,
             (
-                update_portal_camera_transform
-                    .after(TransformSystem::TransformPropagate)
-                    .in_set(PortalCameraSystems::UpdateTransform),
-                update_portal_camera_frusta
-                    .after(VisibilitySystems::UpdateFrusta)
-                    .in_set(PortalCameraSystems::UpdateFrusta),
+                update_portal_camera_transform.in_set(PortalCameraSystems::UpdateTransform),
+                update_portal_camera_frusta.in_set(PortalCameraSystems::UpdateFrusta),
             ),
         )
         .add_observer(setup_portal_camera)
@@ -221,22 +223,35 @@ fn update_portal_camera_transform(
 
 /// System that updates [`Frustum`] for [`PortalCamera`]s.
 fn update_portal_camera_frusta(
-    portal_query: Query<&Portal>,
+    portal_query: Query<(&Portal, &GlobalTransform)>,
     mut frustum_query: Query<&mut Frustum, With<PortalCamera>>,
     global_transform_query: Query<&GlobalTransform>,
 ) {
-    for portal in &portal_query {
+    for (portal, portal_transform) in &portal_query {
         let Some(linked_camera) = portal.linked_camera else {
             continue;
         };
 
-        // `PortalCamera` requires `Camera3d`.
-        let mut frustum = frustum_query.get_mut(linked_camera).unwrap();
+        let Ok(mut frustum) = frustum_query.get_mut(linked_camera) else {
+            continue;
+        };
 
-        // If the `Portal` has a valid `linked_camera`, this is guaranteed.
-        let target_transform = global_transform_query.get(portal.target).unwrap();
+        let Ok([primary_camera_transform, target_transform]) =
+            global_transform_query.get_many([portal.primary_camera, portal.target])
+        else {
+            continue;
+        };
 
-        let normal = target_transform.forward();
+        let mut normal = target_transform.forward();
+
+        if portal.conditionally_flip_near_plane_normal {
+            let camera_to_portal =
+                portal_transform.translation() - primary_camera_transform.translation();
+            if camera_to_portal.dot(*portal_transform.forward()) <= 0.0 {
+                normal = -normal;
+            }
+        }
+
         let distance = -target_transform
             .translation()
             .dot(normal.normalize_or_zero());
