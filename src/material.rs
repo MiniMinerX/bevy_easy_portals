@@ -143,10 +143,12 @@ fn spawn_material(
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
     let entity = trigger.entity();
-    let (portal, portal_image) = portal_query.get(entity).unwrap();
+    let Ok((portal, portal_image)) = portal_query.get(entity) else {
+        return;
+    };
     commands
         .entity(entity)
-        .insert(MeshMaterial3d(materials.add(PortalMaterial {
+        .insert_if_new(MeshMaterial3d(materials.add(PortalMaterial {
             base_color_texture: Some(portal_image.0.clone()),
             cull_mode: portal.cull_mode,
             ..default()
