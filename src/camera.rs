@@ -244,7 +244,7 @@ fn update_portal_camera_frusta(
 
         let mut normal = target_transform.forward();
 
-        if portal.conditionally_flip_near_plane_normal {
+        if portal.flip_near_plane_normal {
             let camera_to_portal =
                 portal_transform.translation() - primary_camera_transform.translation();
             if camera_to_portal.dot(*portal_transform.forward()) <= 0.0 {

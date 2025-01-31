@@ -177,7 +177,7 @@ fn setup(
                 // back face.
                 Portal::new(primary_camera, target)
                     .with_cull_mode(None)
-                    .with_conditionally_flip_near_plane_normal(true),
+                    .with_flip_near_plane_normal(true),
                 // Stop portals from recursively rendering eachother
                 RenderLayers::layer(1),
             ))
