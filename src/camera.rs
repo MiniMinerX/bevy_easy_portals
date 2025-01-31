@@ -62,7 +62,6 @@ impl Plugin for PortalCameraPlugin {
 /// Component used to mark a [`Portal`]'s associated camera.
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
-#[require(Camera3d)]
 pub struct PortalCamera(pub Entity);
 
 /// Component used to store a weak reference to a [`PortalCamera`]'s rendered image.
@@ -96,9 +95,7 @@ fn setup_portal_camera(
 ) {
     let entity = trigger.entity();
 
-    let mut portal = portal_query
-        .get_mut(entity)
-        .expect("observer guarantees existence of component");
+    let mut portal = portal_query.get_mut(entity).unwrap();
 
     let Ok((primary_camera, camera_3d, tonemapping, deband_dither, color_grading, exposure)) =
         primary_camera_query.get(portal.primary_camera)
@@ -173,9 +170,9 @@ fn despawn_portal_camera(
 ) {
     let portal = portal_query.get(trigger.entity()).unwrap();
 
-    commands
-        .entity(portal.linked_camera.unwrap())
-        .despawn_recursive();
+    if let Some(linked_camera) = portal.linked_camera {
+        commands.entity(linked_camera).despawn_recursive();
+    }
 }
 
 /// System that updates a [`PortalCamera`]s [`Transform`] and [`GlobalTransform`] based on the
