@@ -30,13 +30,14 @@ impl Plugin for PortalPickingPlugin {
                 PreUpdate,
                 (
                     portal_inputs.in_set(PickSet::Input),
-                    portal_hover.in_set(PickSet::PostFocus),
+                    portal_picking.in_set(PickSet::Last),
                 ),
             )
             .add_observer(add_pointer);
     }
 }
 
+/// Used to send inputs obtained in [`portal_picking`] in the next frame.
 #[derive(Event, Debug)]
 struct PortalInput {
     pointer_id: PointerId,
@@ -44,6 +45,7 @@ struct PortalInput {
     action: PointerAction,
 }
 
+/// Adds [`PointerId`] and [`PointerLocation`] to entities that have a [`PortalImage`] added.
 fn add_pointer(
     trigger: Trigger<OnAdd, PortalImage>,
     mut commands: Commands,
@@ -62,6 +64,7 @@ fn add_pointer(
     ));
 }
 
+/// Maps incoming [`PortalInput`]s to [`PointerInput`]s.
 fn portal_inputs(
     mut portal_inputs: EventReader<PortalInput>,
     mut output: EventWriter<PointerInput>,
@@ -75,7 +78,11 @@ fn portal_inputs(
     }
 }
 
-fn portal_hover(
+/// Handles picking.
+///
+/// To allow for the [`PointerLocation`] to not lag behind, we raycast against the portal's normal.
+/// This comes at the cost of a single frame hit delay.
+fn portal_picking(
     portal_query: Query<(&Portal, &Transform, &PointerId, &PointerLocation)>,
     camera_global_transform_query: Query<(&Camera, &GlobalTransform)>,
     camera_query: Query<&Camera>,
@@ -109,42 +116,60 @@ fn portal_hover(
     }
 
     for (pointer_id, entity) in portals {
-        let (portal, &portal_transform, &portal_pointer_id, portal_pointer_location) =
-            portal_query.get(entity).unwrap();
+        let Ok((portal, &portal_transform, &portal_pointer_id, portal_pointer_location)) =
+            portal_query.get(entity)
+        else {
+            // This could fail because we store entities from the previous frame in
+            // `dragged_last_frame`. There's no guarantee they will still have these components
+            // this frame
+            continue;
+        };
 
-        let portal_camera = camera_query.get(portal.linked_camera.unwrap()).unwrap();
+        let Some(portal_camera) = portal
+            .linked_camera
+            .and_then(|camera| camera_query.get(camera).ok())
+        else {
+            continue;
+        };
         let Ok((primary_camera, primary_camera_transform)) =
             camera_global_transform_query.get(portal.primary_camera)
         else {
             continue;
         };
+        // TODO: Having `target` cached here is nice, but shouldn't `PointerLocation::Location` be
+        // set to `None` if the portal isn't being hovered?
         let target = portal_pointer_location.location().cloned().unwrap().target;
 
-        for input in pointer_inputs.read() {
-            // We only care about inputs related to the hovering pointer
-            if input.pointer_id != pointer_id {
-                continue;
-            }
-
+        for input in pointer_inputs
+            .read()
+            .filter(|input| input.pointer_id == pointer_id)
+        {
             // Manually retrieve the current pointer's position, so that it doesn't lag a frame
             // behind
+            //
+            // First, shoot a ray forward (w.r.t `primary_camera_transform`)
             let Ok(ray) =
                 primary_camera.viewport_to_world(primary_camera_transform, input.location.position)
             else {
                 continue;
             };
+            // Get the distance from the ray's origin to the portal's normal
             let Some(distance) = ray.intersect_plane(
                 portal_transform.translation,
                 InfinitePlane3d::new(portal_transform.forward()),
             ) else {
                 continue;
             };
+            // We can get the world position of the intersection now. Finally, we use it and
+            // convert to the portal camera's viewport
             let Ok(position) =
                 portal_camera.world_to_viewport(primary_camera_transform, ray.get_point(distance))
             else {
                 continue;
             };
 
+            // We could use `Commands::send_event` here, but I'm not sure if it will hurt
+            // performance
             portal_inputs.send(PortalInput {
                 pointer_id: portal_pointer_id,
                 location: Location {
