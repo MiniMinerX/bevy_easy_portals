@@ -22,10 +22,14 @@ impl PluginGroup for PortalPlugins {
 
 /// Component used to create a portal.
 ///
-/// Adding this to an entity causes a camera (marked with [`PortalCamera`], and with
-/// [`RenderTarget::Image`]) to be spawned, inheriting the primary camera's properties.
+/// If [`camera::PortalCameraPlugin`] is enabled, adding this to an entity causes a camera (marked
+/// with [`camera::PortalCamera`], and with [`RenderTarget::Image`]) to be spawned, inheriting the
+/// the properties of [`Portal::primary_camera`].
 ///
-/// A [`PortalMaterial`] is also inserted on the entity, inherting [`Portal::cull_mode`].
+/// If [`material::PortalMaterialPlugin`] is enabled, a [`material::PortalMaterial`] is inserted on
+/// the entity, inherting [`Portal::cull_mode`] for convenience.
+///
+/// [`RenderTarget::Image`]: bevy::render::camera::RenderTarget
 #[non_exhaustive]
 #[derive(Component, Reflect, Debug)]
 #[reflect(Component)]
@@ -33,7 +37,7 @@ impl PluginGroup for PortalPlugins {
 pub struct Portal {
     /// The entity with the primary render [`Camera`].
     ///
-    /// In other words, the [`Camera`] used to look at this portal.
+    /// In other words, the camera used to look at this portal.
     pub primary_camera: Entity,
     /// The target entity that should be used to decide the camera's position.
     ///
@@ -47,24 +51,22 @@ pub struct Portal {
     ///
     /// # Note
     ///
-    /// If you are using `Some(Face::Front)` or `None` here, and you plane is a mesh, you should
+    /// If you are using `Some(Face::Front)` or `None` here, and your mesh is flat, you should
     /// consider setting [`Portal::conditionally_flip_near_plane_normal`] to `true`.
     // TODO: Can this be remotely reflected upstream now that #6042 has landed?
     #[reflect(ignore)]
     pub cull_mode: Option<Face>,
-    /// The [`Entity`] that has this portal's [`camera::PortalCamera`].
-    ///
-    /// This is set internally and should not be manually assigned.
+    /// The entity that has this portal's [`camera::PortalCamera`].
     pub linked_camera: Option<Entity>,
     /// If set to `true` this will flip the near plane of the [`camera::PortalCamera`]s frustum if
-    /// the primary camera is on the backside of the portal.
+    /// the primary camera is facing the back face of the portal.
     ///
-    /// This is particularly useful for portals that are planes and don't have their back face
-    /// culled. In other words, set this to `true` if you have a bidirectional portal with a plane
+    /// This is particularly useful for portals that are flat meshes and don't have their back face
+    /// culled. In other words, set this to `true` if you have a bidirectional portal with a flat
     /// mesh. Otherwise, set it to `false`.
     ///
     /// Set to `false` by default.
-    pub conditionally_flip_near_plane_normal: bool,
+    pub flip_near_plane_normal: bool,
 }
 
 impl Portal {
@@ -82,7 +84,7 @@ impl Portal {
             target,
             cull_mode: Some(Face::Back),
             linked_camera: None,
-            conditionally_flip_near_plane_normal: false,
+            flip_near_plane_normal: false,
         }
     }
 
@@ -95,11 +97,8 @@ impl Portal {
 
     #[inline]
     #[must_use]
-    pub fn with_conditionally_flip_near_plane_normal(
-        mut self,
-        conditionally_flip_near_plane_normal: bool,
-    ) -> Self {
-        self.conditionally_flip_near_plane_normal = conditionally_flip_near_plane_normal;
+    pub fn with_flip_near_plane_normal(mut self, with_flip_near_plane_normal: bool) -> Self {
+        self.flip_near_plane_normal = with_flip_near_plane_normal;
         self
     }
 }
