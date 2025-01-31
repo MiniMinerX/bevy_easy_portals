@@ -61,9 +61,9 @@ pub struct PortalMaterial {
     pub cull_mode: Option<Face>,
     /// The effect of draw calls on the depth and stencil aspects of the portal.
     ///
-    /// Defaults to the standard mesh [`DepthStencilState`] but with a [`DepthBiasState`] of
-    /// `constant = 1` and `slope_scale = 1.0`. This is used to solve z-fighting when a portal is
-    /// inside another mesh.
+    /// You can make use of this field to resolve z-fighting.
+    ///
+    /// Defaults to the standard mesh [`DepthStencilState`].
     pub depth_stencil: Option<DepthStencilState>,
 }
 
@@ -82,11 +82,7 @@ impl Default for PortalMaterial {
                     read_mask: 0,
                     write_mask: 0,
                 },
-                bias: DepthBiasState {
-                    constant: 1,
-                    slope_scale: 1.0,
-                    clamp: 0.0,
-                },
+                bias: DepthBiasState::default(),
             }),
         }
     }
