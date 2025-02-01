@@ -13,7 +13,6 @@ use bevy::{
     },
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
-use bevy_render::{view::RenderLayers, Render};
 
 
 use crate::Portal;
@@ -154,8 +153,6 @@ fn setup_portal_camera(
                 color_grading.cloned().unwrap_or_default(),
                 exposure.copied().unwrap_or_default(),
                 PortalCamera(entity),
-                RenderLayers::from_layers(&[1]),
-
             ))
             .id(),
     );
