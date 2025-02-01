@@ -140,7 +140,7 @@ fn setup_portal_camera(
             .spawn((
                 Name::new("Portal Camera"),
                 Camera {
-                    order: -1,
+                    order: 2,
                     target: RenderTarget::Image(image_handle.clone()),
                     ..primary_camera.clone()
                 },
