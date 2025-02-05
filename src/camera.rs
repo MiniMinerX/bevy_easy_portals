@@ -14,6 +14,8 @@ use bevy::{
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
+use bevy::render::camera::ManualTextureView;
+
 use crate::Portal;
 
 /// Plugin that provides [`PortalCamera`] spawning/despawning, transform and frusta updates, and
