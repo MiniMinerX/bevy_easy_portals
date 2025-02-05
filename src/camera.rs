@@ -92,6 +92,7 @@ fn setup_portal_camera(
     mut images: ResMut<Assets<Image>>,
     global_transform_query: Query<&GlobalTransform>,
     viewport_size: ViewportSize,
+    manual_views: Res<ManualTextureViews>,
 ) {
     let entity = trigger.entity();
 
@@ -108,6 +109,12 @@ fn setup_portal_camera(
 
     let image_handle = {
         let Some(size) = viewport_size.get_viewport_size(primary_camera) else {
+            if let RenderTarget::TextureView(handle) = &primary_camera.target {
+                if let Some(manual_view) = manual_views.get(handle) {
+                    let size = UVec2::new(manual_view.size.x, manual_view.size.y);    
+                }
+            }
+            
             error!("could not compute viewport size for portal {entity}");
             return;
         };
