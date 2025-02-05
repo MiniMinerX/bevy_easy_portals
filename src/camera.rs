@@ -14,7 +14,7 @@ use bevy::{
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
-use bevy::render::camera::ManualTextureView;
+use bevy::render::camera::ManualTextureViews;
 
 use crate::Portal;
 
