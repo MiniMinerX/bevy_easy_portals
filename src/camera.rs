@@ -110,19 +110,24 @@ fn setup_portal_camera(
     };
 
     let image_handle = {
-        let Some(size) = viewport_size.get_viewport_size(primary_camera) else {
-            if let RenderTarget::TextureView(handle) = &primary_camera.target {
-                if let Some(manual_view) = manual_views.get(handle) {
-                    let size = UVec2::new(manual_view.size.x, manual_view.size.y);    
-                } else {
-                    error!("could not compute viewport size for portal {entity}");
-                    return;
+        let size = if let Some(size) = viewport_size.get_viewport_size(primary_camera) {
+            size
+        } else if let RenderTarget::TextureView(handle) = &primary_camera.target {
+            if let Some(manual_view) = manual_views.get(handle) {
+                Extent3d {
+                    width: manual_view.size.x, 
+                    height: manual_view.size.y,
+                    depth_or_array_layers: 1,
                 }
             } else {
                 error!("could not compute viewport size for portal {entity}");
-                return;   
+                return;
             }
+        } else {
+            error!("could not compute viewport size for portal {entity}");
+            return;
         };
+
         let format = TextureFormat::Bgra8UnormSrgb;
         let image = Image {
             data: vec![0; size.volume() * format.pixel_size()],
