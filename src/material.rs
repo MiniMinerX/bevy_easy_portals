@@ -58,12 +58,14 @@ pub struct PortalMaterial {
     /// This field's value is inherited from what is set on [`Portal`], but not kept in sync.
     ///
     /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
+    #[reflect(ignore)]
     pub cull_mode: Option<Face>,
     /// The effect of draw calls on the depth and stencil aspects of the portal.
     ///
     /// You can make use of this field to resolve z-fighting.
     ///
     /// Defaults to the standard mesh [`DepthStencilState`].
+    #[reflect(ignore)]
     pub depth_stencil: Option<DepthStencilState>,
 }
 
