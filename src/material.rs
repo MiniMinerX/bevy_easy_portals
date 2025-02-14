@@ -45,7 +45,7 @@ impl Plugin for PortalMaterialPlugin {
 }
 
 /// Material used for a [`Portal`]'s mesh.
-#[derive(Asset, AsBindGroup, Clone, TypePath)]
+#[derive(Asset, AsBindGroup, Clone, TypePath, Reflect)]
 #[bind_group_data(PortalMaterialKey)]
 pub struct PortalMaterial {
     #[texture(0)]
