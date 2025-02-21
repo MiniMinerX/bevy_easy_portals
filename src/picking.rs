@@ -5,6 +5,9 @@
 //! This module does *not* provide any backend for you. It provides custom inputs that are
 //! compatible with any backend. The entity containing the [`Portal`] will need to be picked via a
 //! backend, hits will then be sent "through" the target.
+//!
+//! Some backends support opt-in behavior for picking, where cameras and entities require a marker
+//! component to be considered in the backend. This also applies to portal cameras.
 
 use bevy::{
     picking::{
