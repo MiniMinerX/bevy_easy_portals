@@ -4,7 +4,7 @@ use bevy::{
     image::{TextureFormatPixelInfo, Volume},
     prelude::*,
     render::{
-        camera::{Exposure, RenderTarget},
+        camera::{Exposure, ManualTextureViews, RenderTarget},
         primitives::{Frustum, HalfSpace},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
@@ -89,9 +89,8 @@ fn setup_portal_camera(
         Option<&ColorGrading>,
         Option<&Exposure>,
     )>,
-    mut images: ResMut<Assets<Image>>,
     global_transform_query: Query<&GlobalTransform>,
-    viewport_size: ViewportSize,
+    mut portal_images: PortalImages,
 ) {
     let entity = trigger.entity();
 
@@ -106,29 +105,9 @@ fn setup_portal_camera(
         return;
     };
 
-    let image_handle = {
-        let Some(size) = viewport_size.get_viewport_size(primary_camera) else {
-            error!("could not compute viewport size for portal {entity}");
-            return;
-        };
-        let format = TextureFormat::Bgra8UnormSrgb;
-        let image = Image {
-            data: vec![0; size.volume() * format.pixel_size()],
-            texture_descriptor: TextureDescriptor {
-                label: None,
-                size,
-                dimension: TextureDimension::D2,
-                format,
-                mip_level_count: 1,
-                sample_count: 1,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            ..default()
-        };
-        images.add(image)
+    let Some(image_handle) = portal_images.new(primary_camera) else {
+        error!("could not create portal image for {entity}");
+        return;
     };
 
     let Ok(global_transform) = global_transform_query.get(portal.target).copied() else {
@@ -282,16 +261,43 @@ fn resize_portal_images(
 }
 
 #[derive(SystemParam)]
-struct ViewportSize<'w, 's> {
+struct PortalImages<'w, 's> {
     primary_window_query: Query<'w, 's, &'static Window, With<PrimaryWindow>>,
     window_query: Query<'w, 's, &'static Window>,
+    images: ResMut<'w, Assets<Image>>,
+    manual_texture_views: Res<'w, ManualTextureViews>,
 }
 
-impl ViewportSize<'_, '_> {
+impl PortalImages<'_, '_> {
+    /// Creates a new [`Image`] with size matching the given `camera`.
+    ///
+    /// Returns `None` if no viewport size could be obtained.
+    fn new(&mut self, camera: &Camera) -> Option<Handle<Image>> {
+        let size = self.get_viewport_size(camera)?;
+        let format = TextureFormat::Bgra8UnormSrgb;
+        let image = Image {
+            data: vec![0; size.volume() * format.pixel_size()],
+            texture_descriptor: TextureDescriptor {
+                label: None,
+                size,
+                dimension: TextureDimension::D2,
+                format,
+                mip_level_count: 1,
+                sample_count: 1,
+                usage: TextureUsages::TEXTURE_BINDING
+                    | TextureUsages::COPY_DST
+                    | TextureUsages::RENDER_ATTACHMENT,
+                view_formats: &[],
+            },
+            ..default()
+        };
+        let handle = self.images.add(image);
+        Some(handle)
+    }
+
     /// Retrieves the size of the viewport of a given `camera`.
     ///
-    /// Returns [`None`] if no sizing could be obtained, or for any [`RenderTarget`] variant other
-    /// than [`RenderTarget::Window`].
+    /// Returns `None` if no sizing could be obtained.
     fn get_viewport_size(&self, camera: &Camera) -> Option<Extent3d> {
         match camera.viewport.as_ref() {
             Some(viewport) => Some(viewport.physical_size),
@@ -301,7 +307,11 @@ impl ViewportSize<'_, '_> {
                     WindowRef::Entity(entity) => self.window_query.get(*entity).ok(),
                 })
                 .map(Window::physical_size),
-                _ => None,
+                RenderTarget::Image(handle) => self.images.get(handle).map(Image::size),
+                RenderTarget::TextureView(handle) => self
+                    .manual_texture_views
+                    .get(handle)
+                    .map(|texture| texture.size),
             },
         }
         .map(|size| Extent3d {
