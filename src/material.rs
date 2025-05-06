@@ -140,7 +140,7 @@ fn spawn_material(
     portal_query: Query<(&Portal, &PortalImage)>,
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let Ok((portal, portal_image)) = portal_query.get(entity) else {
         return;
     };

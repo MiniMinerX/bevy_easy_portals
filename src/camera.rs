@@ -1,17 +1,13 @@
 use bevy::{
-    core_pipeline::tonemapping::{DebandDither, Tonemapping},
-    ecs::system::SystemParam,
-    image::{TextureFormatPixelInfo, Volume},
-    prelude::*,
-    render::{
-        camera::{Exposure, ManualTextureViews, RenderTarget},
+    core_pipeline::tonemapping::{DebandDither, Tonemapping}, ecs::system::SystemParam, image::{TextureFormatPixelInfo, Volume}, math::FloatOrd, prelude::*, render::{
+        camera::{Exposure, ImageRenderTarget, ManualTextureViews, RenderTarget},
         primitives::{Frustum, HalfSpace},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
         view::{ColorGrading, VisibilitySystems},
-    },
-    window::{PrimaryWindow, WindowRef, WindowResized},
+    }, window::{PrimaryWindow, WindowRef, WindowResized},
+    log::error,
 };
 
 use crate::Portal;
@@ -92,7 +88,7 @@ fn setup_portal_camera(
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
 
     let mut portal = portal_query.get_mut(entity).unwrap();
 
@@ -120,7 +116,10 @@ fn setup_portal_camera(
                 Name::new("Portal Camera"),
                 Camera {
                     order: -1,
-                    target: RenderTarget::Image(image_handle.clone()),
+                    target: RenderTarget::Image(ImageRenderTarget {
+                        handle: image_handle.clone(),
+                        scale_factor: FloatOrd(1.0),
+                    }),
                     ..primary_camera.clone()
                 },
                 global_transform.compute_transform(),
@@ -147,10 +146,10 @@ fn despawn_portal_camera(
     portal_query: Query<&Portal>,
     mut commands: Commands,
 ) {
-    let portal = portal_query.get(trigger.entity()).unwrap();
+    let portal = portal_query.get(trigger.target()).unwrap();
 
     if let Some(linked_camera) = portal.linked_camera {
-        commands.entity(linked_camera).despawn_recursive();
+        commands.entity(linked_camera).despawn();
     }
 }
 
@@ -276,7 +275,7 @@ impl PortalImages<'_, '_> {
         let size = self.get_viewport_size(camera)?;
         let format = TextureFormat::Bgra8UnormSrgb;
         let image = Image {
-            data: vec![0; size.volume() * format.pixel_size()],
+            data: Some(vec![0; size.volume() * format.pixel_size()]),
             texture_descriptor: TextureDescriptor {
                 label: None,
                 size,
@@ -303,11 +302,11 @@ impl PortalImages<'_, '_> {
             Some(viewport) => Some(viewport.physical_size),
             None => match &camera.target {
                 RenderTarget::Window(window_ref) => (match window_ref {
-                    WindowRef::Primary => self.primary_window_query.get_single().ok(),
+                    WindowRef::Primary => self.primary_window_query.single().ok(),
                     WindowRef::Entity(entity) => self.window_query.get(*entity).ok(),
                 })
                 .map(Window::physical_size),
-                RenderTarget::Image(handle) => self.images.get(handle).map(Image::size),
+                RenderTarget::Image(img_render_handle) => self.images.get(&img_render_handle.handle).map(Image::size),
                 RenderTarget::TextureView(handle) => self
                     .manual_texture_views
                     .get(handle)
