@@ -11,13 +11,13 @@
 
 use bevy::{
     picking::{
-        focus::HoverMap,
         pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
         PickSet,
+        hover::HoverMap,
     },
     prelude::*,
     render::camera::NormalizedRenderTarget,
-    utils::HashSet,
+    platform::collections::HashSet,
 };
 use uuid::Uuid;
 
@@ -54,10 +54,10 @@ fn add_pointer(
     mut commands: Commands,
     query: Query<(Entity, &PortalImage)>,
 ) {
-    let (entity, portal_image) = query.get(trigger.entity()).unwrap();
+    let (entity, portal_image) = query.get(trigger.target()).unwrap();
 
     let location = Location {
-        target: NormalizedRenderTarget::Image(portal_image.0.clone()),
+        target: NormalizedRenderTarget::Image(portal_image.0.clone().into()),
         position: Vec2::ZERO,
     };
 
