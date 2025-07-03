@@ -144,7 +144,7 @@ fn spawn_material(
     };
     commands
         .entity(entity)
-        .insert_if_new(MeshMaterial3d(materials.add(PortalMaterial {
+        .insert(MeshMaterial3d(materials.add(PortalMaterial {
             base_color_texture: Some(portal_image.0.clone()),
             cull_mode: portal.cull_mode,
             ..default()
