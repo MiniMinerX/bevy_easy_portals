@@ -115,7 +115,7 @@ fn setup_portal_camera(
             .spawn((
                 Name::new("Portal Camera"),
                 Camera {
-                    order: -1,
+                    order: 100,
                     target: RenderTarget::Image(ImageRenderTarget {
                         handle: image_handle.clone(),
                         scale_factor: FloatOrd(1.0),
