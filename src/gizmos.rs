@@ -33,7 +33,7 @@ fn debug_portal_meshes(
         let gizmo_transform = Transform {
             translation: global_transform.translation(),
             rotation: global_transform.rotation(),
-            scale: (aabb.half_extents * 2.0), // Aabb half_extents are already in local space of the mesh
+            scale: (aabb.half_extents * 2.0).into(), // Aabb half_extents are already in local space of the mesh
         };
         gizmos.cuboid(gizmo_transform, ORANGE_600);
     }
@@ -60,6 +60,6 @@ fn debug_portal_cameras(
         // Use the portal's GlobalTransform for its forward direction
         let start_portal = portal_global_transform.translation();
         let end_portal = start_portal + portal_global_transform.forward() * 0.5;
-        gizmos.arrow(start_portal, end_portal, Color::BLUE); // Use a different color for clarity
+        gizmos.arrow(start_portal, end_portal, ORANGE_600); // Use a different color for clarity
     }
 }
