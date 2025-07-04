@@ -7,7 +7,7 @@ use crate::Portal;
 #[derive(Reflect, Default, GizmoConfigGroup)]
 pub struct PortalGizmos;
 
-/// Gizmo plugin for [`Portal`]s.
+/// Gizmo plugin for [`Portal`] debugging.
 ///
 /// These gizmos help visualize aspects like [`Portal`] meshes and where the
 /// [`Portal::target_transform`] is located (along with its facing direction).
@@ -23,29 +23,43 @@ impl Plugin for PortalGizmosPlugin {
 /// System that renders the [`Aabb`]s of a [`Portal`]'s mesh.
 fn debug_portal_meshes(
     mut gizmos: Gizmos<PortalGizmos>,
-    portal_query: Query<(&Transform, &Aabb), With<Portal>>,
+    // Query GlobalTransform instead of local Transform
+    portal_query: Query<(&GlobalTransform, &Aabb), With<Portal>>,
 ) {
-    for (&transform, aabb) in &portal_query {
-        let transform = Transform {
-            scale: (aabb.half_extents * 2.0).into(),
-            ..transform
+    for (&global_transform, aabb) in &portal_query {
+        // Create a new Transform from the GlobalTransform, but keep the Aabb's scale
+        // The Aabb's half_extents are in local space, so we want to apply them
+        // relative to the global orientation.
+        let gizmo_transform = Transform {
+            translation: global_transform.translation(),
+            rotation: global_transform.rotation(),
+            scale: (aabb.half_extents * 2.0), // Aabb half_extents are already in local space of the mesh
         };
-        gizmos.cuboid(transform, ORANGE_600);
+        gizmos.cuboid(gizmo_transform, ORANGE_600);
     }
 }
+
 /// System that renders arrows indicating the translation and rotation of [`PortalCamera`]s.
 fn debug_portal_cameras(
     mut gizmos: Gizmos<PortalGizmos>,
-    portal_query: Query<&Portal>,
+    portal_query: Query<(&Portal, &GlobalTransform)>, // Query GlobalTransform for the portal itself
     global_transform_query: Query<&GlobalTransform>,
 ) {
-    for portal in &portal_query {
-        let transform = global_transform_query
+    for (portal, portal_global_transform) in &portal_query {
+        let target_transform = global_transform_query
             .get(portal.target)
             .map(GlobalTransform::compute_transform)
             .expect("target should have GlobalTransform");
-        let start = transform.translation;
-        let end = start + transform.forward() * 0.5;
-        gizmos.arrow(start, end, ORANGE_600);
+
+        // Gizmo for the portal's target (already correct)
+        let start_target = target_transform.translation;
+        let end_target = start_target + target_transform.forward() * 0.5;
+        gizmos.arrow(start_target, end_target, ORANGE_600);
+
+        // Add a gizmo for the portal's own forward direction
+        // Use the portal's GlobalTransform for its forward direction
+        let start_portal = portal_global_transform.translation();
+        let end_portal = start_portal + portal_global_transform.forward() * 0.5;
+        gizmos.arrow(start_portal, end_portal, Color::BLUE); // Use a different color for clarity
     }
 }
