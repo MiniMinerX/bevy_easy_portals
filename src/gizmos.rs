@@ -55,11 +55,5 @@ fn debug_portal_cameras(
         let start_target = target_transform.translation;
         let end_target = start_target + target_transform.forward() * 0.5;
         gizmos.arrow(start_target, end_target, ORANGE_600);
-
-        // Add a gizmo for the portal's own forward direction
-        // Use the portal's GlobalTransform for its forward direction
-        let start_portal = portal_global_transform.translation();
-        let end_portal = start_portal + portal_global_transform.forward() * 0.5;
-        gizmos.arrow(start_portal, end_portal, ORANGE_600); // Use a different color for clarity
     }
 }
