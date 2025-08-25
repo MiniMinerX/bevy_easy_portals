@@ -50,11 +50,11 @@ struct PortalInput {
 
 /// Adds [`PointerId`] and [`PointerLocation`] to entities that have a [`PortalImage`] added.
 fn add_pointer(
-    trigger: Trigger<OnAdd, PortalImage>,
+    trigger: On<Add, PortalImage>,
     mut commands: Commands,
     query: Query<(Entity, &PortalImage)>,
 ) {
-    let (entity, portal_image) = query.get(trigger.target()).unwrap();
+    let (entity, portal_image) = query.get(trigger.entity()).unwrap();
 
     let location = Location {
         target: NormalizedRenderTarget::Image(portal_image.0.clone().into()),

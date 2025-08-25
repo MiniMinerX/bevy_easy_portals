@@ -15,7 +15,8 @@ exclude = [".github"]
 uuid = { version = "1.11.0", features = ["v4"], optional = true }
 
 [dependencies.bevy]
-version = "0.16.0"
+version = "0.17.0-dev"
+git = "https://github.com/bevyengine/bevy.git"
 default-features = false
 features = [
     "bevy_core_pipeline",
@@ -27,7 +28,8 @@ features = [
 ]
 
 [dev-dependencies.bevy]
-version = "0.16.0"
+version = "0.17.0-dev"
+git = "https://github.com/bevyengine/bevy.git"
 
 [features]
 default = []

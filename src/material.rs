@@ -1,17 +1,9 @@
 use bevy::{
-    asset::load_internal_asset,
-    core_pipeline::core_3d::CORE_3D_DEPTH_FORMAT,
-    pbr::{MaterialPipeline, MaterialPipelineKey},
-    prelude::*,
-    render::{
-        mesh::MeshVertexBufferLayoutRef,
-        render_resource::{
+    asset::{load_internal_asset, uuid_handle}, core_pipeline::core_3d::CORE_3D_DEPTH_FORMAT, mesh::MeshVertexBufferLayoutRef, pbr::{MaterialPipeline, MaterialPipelineKey}, prelude::*, render::render_resource::{
             AsBindGroup, CompareFunction, DepthBiasState, DepthStencilState, Face,
-            RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, StencilFaceState,
+            RenderPipelineDescriptor, SpecializedMeshPipelineError, StencilFaceState,
             StencilState,
-        },
-    },
-    window::WindowResized,
+        }, shader::ShaderRef, window::WindowResized
 };
 
 use crate::{
@@ -20,7 +12,7 @@ use crate::{
 };
 
 pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(115090128739399034051596692516865947112);
+    uuid_handle!("11509012-8739-3990-3405-159669251694");
 
 pub struct PortalMaterialPlugin;
 
@@ -96,7 +88,7 @@ impl Material for PortalMaterial {
     }
 
     fn specialize(
-        _pipeline: &MaterialPipeline<Self>,
+        _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
@@ -135,12 +127,12 @@ pub fn update_materials<T: Material>(
 }
 
 fn spawn_material(
-    trigger: Trigger<OnAdd, PortalImage>,
+    trigger: On<Add, PortalImage>,
     mut commands: Commands,
     portal_query: Query<(&Portal, &PortalImage)>,
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.entity();
     let Ok((portal, portal_image)) = portal_query.get(entity) else {
         return;
     };

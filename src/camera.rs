@@ -1,13 +1,10 @@
 use bevy::{
-    core_pipeline::tonemapping::{DebandDither, Tonemapping}, ecs::system::SystemParam, image::{TextureFormatPixelInfo, Volume}, math::FloatOrd, prelude::*, render::{
-        camera::{Exposure, ImageRenderTarget, ManualTextureViews, RenderTarget},
-        primitives::{Frustum, HalfSpace},
+    camera::{primitives::{Frustum, HalfSpace}, visibility::VisibilitySystems, Exposure, ImageRenderTarget, RenderTarget}, core_pipeline::tonemapping::{DebandDither, Tonemapping}, ecs::system::SystemParam, image::{TextureFormatPixelInfo, Volume}, log::error, math::FloatOrd, prelude::*, render::{
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
-        view::{ColorGrading, VisibilitySystems},
-    }, window::{PrimaryWindow, WindowRef, WindowResized},
-    log::error,
+        view::ColorGrading,
+    }, transform::plugins::TransformSystem, window::{PrimaryWindow, WindowRef, WindowResized}
 };
 
 use crate::Portal;
@@ -33,7 +30,7 @@ impl Plugin for PortalCameraPlugin {
         app.configure_sets(
             PostUpdate,
             (
-                PortalCameraSystems::UpdateTransform.after(TransformSystem::TransformPropagate),
+                PortalCameraSystems::UpdateTransform.after(TransformSystems::Propagate),
                 PortalCameraSystems::UpdateFrusta.after(VisibilitySystems::UpdateFrusta),
             )
                 .chain(),
@@ -74,7 +71,7 @@ pub struct PortalImage(pub Handle<Image>);
 ///
 /// * The [`PortalCamera`] will inherit any properties currently present on the primary camera.
 fn setup_portal_camera(
-    trigger: Trigger<OnAdd, Portal>,
+    trigger: On<Add, Portal>,
     mut commands: Commands,
     mut portal_query: Query<&mut Portal>,
     primary_camera_query: Query<(
@@ -88,7 +85,7 @@ fn setup_portal_camera(
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
-    let entity = trigger.target();
+    let entity = trigger.entity();
 
     let mut portal = portal_query.get_mut(entity).unwrap();
 
@@ -136,17 +133,17 @@ fn setup_portal_camera(
 
     commands
         .entity(entity)
-        .insert(PortalImage(image_handle.clone_weak()));
+        .insert(PortalImage(image_handle.clone()));
 }
 
 /// System that despawns a [`Portal::linked_camera`] when the [`Portal`] component is removed from
 /// a triggered entity.
 fn despawn_portal_camera(
-    trigger: Trigger<OnRemove, Portal>,
+    trigger: On<Remove, Portal>,
     portal_query: Query<&Portal>,
     mut commands: Commands,
 ) {
-    let portal = portal_query.get(trigger.target()).unwrap();
+    let portal = portal_query.get(trigger.entity()).unwrap();
 
     if let Some(linked_camera) = portal.linked_camera {
         commands.entity(linked_camera).despawn();
@@ -274,8 +271,15 @@ impl PortalImages<'_, '_> {
     fn new(&mut self, camera: &Camera) -> Option<Handle<Image>> {
         let size = self.get_viewport_size(camera)?;
         let format = TextureFormat::Bgra8UnormSrgb;
+        let pixel_size = match format.pixel_size() {
+            Ok(size) => size,
+            Err(_) => {
+                error!("could not determine pixel size for texture format {format:?}");
+                return None;
+            }
+        };
         let image = Image {
-            data: Some(vec![0; size.volume() * format.pixel_size()]),
+            data: Some(vec![0; size.volume() * pixel_size]),
             texture_descriptor: TextureDescriptor {
                 label: None,
                 size,

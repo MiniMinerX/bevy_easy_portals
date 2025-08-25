@@ -6,12 +6,7 @@
 use std::f32::consts::FRAC_PI_4;
 
 use bevy::{
-    color::palettes::tailwind::{SKY_200, SLATE_200},
-    input::mouse::MouseMotion,
-    math::bounding::{Aabb3d, IntersectsVolume},
-    prelude::*,
-    render::{render_resource::Face, view::RenderLayers},
-    window::{CursorGrabMode, PrimaryWindow},
+    camera::visibility::RenderLayers, color::palettes::tailwind::{SKY_200, SLATE_200}, input::mouse::MouseMotion, math::bounding::{Aabb3d, IntersectsVolume}, prelude::*, render::render_resource::Face, window::{CursorGrabMode, CursorOptions, PrimaryWindow}
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::PortalGizmosPlugin;
@@ -86,12 +81,14 @@ struct Shape;
 
 fn setup(
     mut commands: Commands,
-    mut primary_window: Single<&mut Window, With<PrimaryWindow>>,
+    mut primary_window_q: Single<(&mut Window, &mut CursorOptions), With<PrimaryWindow>>,
     mut meshes: ResMut<Assets<Mesh>>,
     mut materials: ResMut<Assets<StandardMaterial>>,
 ) {
-    primary_window.cursor_options.grab_mode = CursorGrabMode::Locked;
-    primary_window.cursor_options.visible = false;
+    let (mut primary_window, mut cursor_options) = primary_window_q.into_inner();
+
+    cursor_options.grab_mode = CursorGrabMode::Locked;
+    cursor_options.visible = false;
 
     let primary_camera = commands
         .spawn((
@@ -201,7 +198,7 @@ fn handle_portal_collision(
     transform_query: Query<&GlobalTransform, Without<CameraController>>,
     mut stored_collision: Option<Single<&mut Collision>>,
 ) {
-    let (camera_entity, mut camera_transform) = camera_query.get_single_mut().unwrap();
+    let (camera_entity, mut camera_transform) = camera_query.single_mut().unwrap();
     let camera_aabb = Aabb3d::new(camera_transform.translation, Vec3::ZERO);
 
     for (portal_entity, portal) in &portal_query {
@@ -264,7 +261,7 @@ fn handle_camera_look(
     mut mouse_motion_events: EventReader<MouseMotion>,
     mut camera_query: Query<(&CameraController, &mut Transform)>,
 ) {
-    let (camera_controller, mut transform) = camera_query.get_single_mut().unwrap();
+    let (camera_controller, mut transform) = camera_query.single_mut().unwrap();
 
     for event in mouse_motion_events.read() {
         let yaw_delta = Quat::from_rotation_y(
@@ -283,7 +280,7 @@ fn handle_movement(
     mut camera_query: Query<(&CameraController, &mut Transform)>,
     time: Res<Time>,
 ) {
-    let (camera_controller, mut transform) = camera_query.get_single_mut().unwrap();
+    let (camera_controller, mut transform) = camera_query.single_mut().unwrap();
 
     // Zero the y-vector to only allow lateral movement
     let forward = transform.forward().with_y(0.0).normalize();
