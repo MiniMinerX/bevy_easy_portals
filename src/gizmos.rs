@@ -1,6 +1,6 @@
 //! Gizmos for [`Portal`] debugging.
 
-use bevy::{color::palettes::tailwind::ORANGE_600, prelude::*, render::primitives::Aabb};
+use bevy::{color::palettes::tailwind::ORANGE_600, prelude::*, camera::primitives::Aabb};
 
 use crate::Portal;
 

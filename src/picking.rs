@@ -16,7 +16,7 @@ use bevy::{
         hover::HoverMap,
     },
     prelude::*,
-    render::camera::NormalizedRenderTarget,
+    camera::NormalizedRenderTarget,
     platform::collections::HashSet,
 };
 use uuid::Uuid;
@@ -41,7 +41,7 @@ impl Plugin for PortalPickingPlugin {
 }
 
 /// Used to send inputs obtained in [`portal_picking`] in the next frame.
-#[derive(Event, Debug)]
+#[derive(BufferedEvent, Debug)]
 struct PortalInput {
     pointer_id: PointerId,
     location: Location,
@@ -73,7 +73,7 @@ fn portal_inputs(
     mut output: EventWriter<PointerInput>,
 ) {
     for event in portal_inputs.read() {
-        output.send(PointerInput {
+        output.write(PointerInput {
             pointer_id: event.pointer_id,
             location: event.location.clone(),
             action: event.action,
@@ -173,7 +173,7 @@ fn portal_picking(
 
             // We could use `Commands::send_event` here, but I'm not sure if it will hurt
             // performance
-            portal_inputs.send(PortalInput {
+            portal_inputs.write(PortalInput {
                 pointer_id: portal_pointer_id,
                 location: Location {
                     target: target.clone(),

@@ -4,7 +4,7 @@ use bevy::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
         view::ColorGrading,
-    }, transform::plugins::TransformSystem, window::{PrimaryWindow, WindowRef, WindowResized}
+    }, window::{PrimaryWindow, WindowRef, WindowResized}
 };
 
 use crate::Portal;
