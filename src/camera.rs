@@ -315,6 +315,7 @@ impl PortalImages<'_, '_> {
                     .manual_texture_views
                     .get(handle)
                     .map(|texture| texture.size),
+                RenderTarget::None {size} => Some(size.clone()),
             },
         }
         .map(|size| Extent3d {

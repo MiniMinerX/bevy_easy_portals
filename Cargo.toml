@@ -35,6 +35,7 @@ git = "https://github.com/bevyengine/bevy.git"
 default = []
 gizmos = ["bevy/bevy_gizmos"]
 picking = ["bevy/bevy_picking", "dep:uuid"]
+dlss = ["bevy/dlss"]
 
 [lints.clippy]
 too_many_arguments = "allow"
