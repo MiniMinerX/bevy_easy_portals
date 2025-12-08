@@ -41,7 +41,7 @@ impl Plugin for PortalPickingPlugin {
 }
 
 /// Used to send inputs obtained in [`portal_picking`] in the next frame.
-#[derive(BufferedEvent, Debug)]
+#[derive(Message, Debug)]
 struct PortalInput {
     pointer_id: PointerId,
     location: Location,
@@ -54,7 +54,7 @@ fn add_pointer(
     mut commands: Commands,
     query: Query<(Entity, &PortalImage)>,
 ) {
-    let (entity, portal_image) = query.get(trigger.entity()).unwrap();
+    let (entity, portal_image) = query.get(trigger.entity).unwrap();
 
     let location = Location {
         target: NormalizedRenderTarget::Image(portal_image.0.clone().into()),
@@ -69,8 +69,8 @@ fn add_pointer(
 
 /// Maps incoming [`PortalInput`]s to [`PointerInput`]s.
 fn portal_inputs(
-    mut portal_inputs: EventReader<PortalInput>,
-    mut output: EventWriter<PointerInput>,
+    mut portal_inputs: MessageReader<PortalInput>,
+    mut output: MessageWriter<PointerInput>,
 ) {
     for event in portal_inputs.read() {
         output.write(PointerInput {
