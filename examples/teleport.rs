@@ -97,7 +97,7 @@ fn setup(
                 clear_color: ClearColorConfig::Custom(Color::BLACK),
                 ..default()
             },
-            // TODO: A not-so-nice hack to help the rendering depth conflicts between the portal's
+            // TODO: A wnot-so-nice hack to help the rendering depth conflicts between the portal's
             // mesh and the near clipping plane of the camera. The value has been "fine-tuned" to
             // visual correctness. PRs that remove this hack are welcome :)
             Projection::Perspective(PerspectiveProjection {
@@ -258,7 +258,7 @@ fn handle_portal_collision(
 }
 
 fn handle_camera_look(
-    mut mouse_motion_events: EventReader<MouseMotion>,
+    mut mouse_motion_events: MessageReader<MouseMotion>,
     mut camera_query: Query<(&CameraController, &mut Transform)>,
 ) {
     let (camera_controller, mut transform) = camera_query.single_mut().unwrap();

@@ -29,7 +29,7 @@ impl Plugin for PortalMaterialPlugin {
             .add_systems(
                 PreUpdate,
                 update_materials::<PortalMaterial>
-                    .run_if(on_event::<WindowResized>)
+                    .run_if(on_message::<WindowResized>)
                     .after(PortalCameraSystems::ResizeImage),
             )
             .add_observer(spawn_material);
@@ -132,7 +132,7 @@ fn spawn_material(
     portal_query: Query<(&Portal, &PortalImage)>,
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.entity;
     let Ok((portal, portal_image)) = portal_query.get(entity) else {
         return;
     };

@@ -85,7 +85,7 @@ fn setup_portal_camera(
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.entity;
 
     let mut portal = portal_query.get_mut(entity).unwrap();
 
@@ -143,7 +143,7 @@ fn despawn_portal_camera(
     portal_query: Query<&Portal>,
     mut commands: Commands,
 ) {
-    let portal = portal_query.get(trigger.entity()).unwrap();
+    let portal = portal_query.get(trigger.entity).unwrap();
 
     if let Some(linked_camera) = portal.linked_camera {
         commands.entity(linked_camera).despawn();
@@ -233,7 +233,7 @@ fn update_portal_camera_frusta(
 
 /// System that resizes [`PortalImage`]s when the [`WindowResized`] event is fired.
 fn resize_portal_images(
-    mut resized_reader: EventReader<WindowResized>,
+    mut resized_reader: MessageReader<WindowResized>,
     window_query: Query<&Window>,
     portal_image_query: Query<&PortalImage>,
     mut images: ResMut<Assets<Image>>,
