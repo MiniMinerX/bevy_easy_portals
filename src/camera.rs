@@ -1,13 +1,19 @@
 use bevy::{
-    core_pipeline::tonemapping::{DebandDither, Tonemapping}, ecs::system::SystemParam, image::{TextureFormatPixelInfo, Volume}, math::FloatOrd, prelude::*, render::{
+    core_pipeline::tonemapping::{DebandDither, Tonemapping},
+    ecs::system::SystemParam,
+    image::{TextureFormatPixelInfo, Volume},
+    log::error,
+    math::FloatOrd,
+    prelude::*,
+    render::{
         camera::{Exposure, ImageRenderTarget, ManualTextureViews, RenderTarget},
         primitives::{Frustum, HalfSpace},
         render_resource::{
             Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
         },
         view::{ColorGrading, VisibilitySystems},
-    }, window::{PrimaryWindow, WindowRef, WindowResized},
-    log::error,
+    },
+    window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
 use crate::Portal;
@@ -306,7 +312,9 @@ impl PortalImages<'_, '_> {
                     WindowRef::Entity(entity) => self.window_query.get(*entity).ok(),
                 })
                 .map(Window::physical_size),
-                RenderTarget::Image(img_render_handle) => self.images.get(&img_render_handle.handle).map(Image::size),
+                RenderTarget::Image(img_render_handle) => {
+                    self.images.get(&img_render_handle.handle).map(Image::size)
+                }
                 RenderTarget::TextureView(handle) => self
                     .manual_texture_views
                     .get(handle)

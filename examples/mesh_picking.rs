@@ -8,7 +8,7 @@ use bevy::{
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::{PortalGizmos, PortalGizmosPlugin};
-use bevy_easy_portals::{picking::PortalPickingPlugin, Portal, PortalPlugins};
+use bevy_easy_portals::{Portal, PortalPlugins, picking::PortalPickingPlugin};
 
 fn main() {
     App::new()

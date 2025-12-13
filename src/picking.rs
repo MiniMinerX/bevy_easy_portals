@@ -11,17 +11,17 @@
 
 use bevy::{
     picking::{
-        pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
         PickSet,
         hover::HoverMap,
+        pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
     },
+    platform::collections::HashSet,
     prelude::*,
     render::camera::NormalizedRenderTarget,
-    platform::collections::HashSet,
 };
 use uuid::Uuid;
 
-use crate::{camera::PortalImage, Portal};
+use crate::{Portal, camera::PortalImage};
 
 /// Enables picking "through" [`Portal`]s.
 pub struct PortalPickingPlugin;

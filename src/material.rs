@@ -15,8 +15,8 @@ use bevy::{
 };
 
 use crate::{
-    camera::{PortalCameraSystems, PortalImage},
     Portal,
+    camera::{PortalCameraSystems, PortalImage},
 };
 
 pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
