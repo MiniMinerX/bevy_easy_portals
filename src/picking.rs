@@ -11,17 +11,17 @@
 
 use bevy::{
     picking::{
-        focus::HoverMap,
-        pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
         PickSet,
+        hover::HoverMap,
+        pointer::{Location, PointerAction, PointerId, PointerInput, PointerLocation},
     },
+    platform::collections::HashSet,
     prelude::*,
     render::camera::NormalizedRenderTarget,
-    utils::HashSet,
 };
 use uuid::Uuid;
 
-use crate::{camera::PortalImage, Portal};
+use crate::{Portal, camera::PortalImage};
 
 /// Enables picking "through" [`Portal`]s.
 pub struct PortalPickingPlugin;
@@ -54,10 +54,10 @@ fn add_pointer(
     mut commands: Commands,
     query: Query<(Entity, &PortalImage)>,
 ) {
-    let (entity, portal_image) = query.get(trigger.entity()).unwrap();
+    let (entity, portal_image) = query.get(trigger.target()).unwrap();
 
     let location = Location {
-        target: NormalizedRenderTarget::Image(portal_image.0.clone()),
+        target: NormalizedRenderTarget::Image(portal_image.0.clone().into()),
         position: Vec2::ZERO,
     };
 
@@ -73,7 +73,7 @@ fn portal_inputs(
     mut output: EventWriter<PointerInput>,
 ) {
     for event in portal_inputs.read() {
-        output.send(PointerInput {
+        output.write(PointerInput {
             pointer_id: event.pointer_id,
             location: event.location.clone(),
             action: event.action,
@@ -173,7 +173,7 @@ fn portal_picking(
 
             // We could use `Commands::send_event` here, but I'm not sure if it will hurt
             // performance
-            portal_inputs.send(PortalInput {
+            portal_inputs.write(PortalInput {
                 pointer_id: portal_pointer_id,
                 location: Location {
                     target: target.clone(),

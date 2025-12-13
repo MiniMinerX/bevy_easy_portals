@@ -15,7 +15,7 @@ use bevy::{
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::PortalGizmosPlugin;
-use bevy_easy_portals::{camera::PortalCameraSystems, Portal, PortalPlugins};
+use bevy_easy_portals::{Portal, PortalPlugins, camera::PortalCameraSystems};
 
 fn main() {
     App::new()

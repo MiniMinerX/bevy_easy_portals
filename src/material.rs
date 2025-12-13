@@ -1,5 +1,5 @@
 use bevy::{
-    asset::load_internal_asset,
+    asset::{load_internal_asset, weak_handle},
     core_pipeline::core_3d::CORE_3D_DEPTH_FORMAT,
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
@@ -15,12 +15,12 @@ use bevy::{
 };
 
 use crate::{
-    camera::{PortalCameraSystems, PortalImage},
     Portal,
+    camera::{PortalCameraSystems, PortalImage},
 };
 
 pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(115090128739399034051596692516865947112);
+    weak_handle!("7228911f-9ac9-47df-8a02-c267dc75dde3");
 
 pub struct PortalMaterialPlugin;
 
@@ -45,7 +45,7 @@ impl Plugin for PortalMaterialPlugin {
 }
 
 /// Material used for a [`Portal`]'s mesh.
-#[derive(Asset, AsBindGroup, Clone, TypePath)]
+#[derive(Asset, AsBindGroup, Clone, Reflect)]
 #[bind_group_data(PortalMaterialKey)]
 pub struct PortalMaterial {
     #[texture(0)]
@@ -58,12 +58,14 @@ pub struct PortalMaterial {
     /// This field's value is inherited from what is set on [`Portal`], but not kept in sync.
     ///
     /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
+    #[reflect(ignore)]
     pub cull_mode: Option<Face>,
     /// The effect of draw calls on the depth and stencil aspects of the portal.
     ///
     /// You can make use of this field to resolve z-fighting.
     ///
     /// Defaults to the standard mesh [`DepthStencilState`].
+    #[reflect(ignore)]
     pub depth_stencil: Option<DepthStencilState>,
 }
 
@@ -138,7 +140,7 @@ fn spawn_material(
     portal_query: Query<(&Portal, &PortalImage)>,
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.target();
     let Ok((portal, portal_image)) = portal_query.get(entity) else {
         return;
     };
