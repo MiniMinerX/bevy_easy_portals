@@ -107,7 +107,7 @@ fn setup_portal_camera(
         return;
     };
 
-    let Some(image_handle) = portal_images.new(primary_camera) else {
+    let Some(image_handle) = portal_images.with_camera(primary_camera) else {
         error!("could not create portal image for {entity}");
         return;
     };
@@ -277,7 +277,7 @@ impl PortalImages<'_, '_> {
     /// Creates a new [`Image`] with size matching the given `camera`.
     ///
     /// Returns `None` if no viewport size could be obtained.
-    fn new(&mut self, camera: &Camera) -> Option<Handle<Image>> {
+    fn with_camera(&mut self, camera: &Camera) -> Option<Handle<Image>> {
         let size = self.get_viewport_size(camera)?;
         let format = TextureFormat::Bgra8UnormSrgb;
         let image = Image {

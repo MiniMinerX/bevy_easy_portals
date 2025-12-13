@@ -1,5 +1,5 @@
 use bevy::{
-    asset::load_internal_asset,
+    asset::{load_internal_asset, weak_handle},
     core_pipeline::core_3d::CORE_3D_DEPTH_FORMAT,
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
@@ -20,7 +20,7 @@ use crate::{
 };
 
 pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(115090128739399034051596692516865947112);
+    weak_handle!("7228911f-9ac9-47df-8a02-c267dc75dde3");
 
 pub struct PortalMaterialPlugin;
 
