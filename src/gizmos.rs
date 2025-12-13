@@ -23,35 +23,29 @@ impl Plugin for PortalGizmosPlugin {
 /// System that renders the [`Aabb`]s of a [`Portal`]'s mesh.
 fn debug_portal_meshes(
     mut gizmos: Gizmos<PortalGizmos>,
-    // Query GlobalTransform instead of local Transform
     portal_query: Query<(&GlobalTransform, &Aabb), With<Portal>>,
 ) {
     for (&global_transform, aabb) in &portal_query {
-        // Create a new Transform from the GlobalTransform, but keep the Aabb's scale
-        // The Aabb's half_extents are in local space, so we want to apply them
-        // relative to the global orientation.
-        let gizmo_transform = Transform {
+        let transform = Transform {
             translation: global_transform.translation(),
             rotation: global_transform.rotation(),
-            scale: (aabb.half_extents * 2.0).into(), // Aabb half_extents are already in local space of the mesh
+            scale: (aabb.half_extents * 2.0).into(),
         };
-        gizmos.cuboid(gizmo_transform, ORANGE_600);
+        gizmos.cuboid(transform, ORANGE_600);
     }
 }
 
 /// System that renders arrows indicating the translation and rotation of [`PortalCamera`]s.
 fn debug_portal_cameras(
     mut gizmos: Gizmos<PortalGizmos>,
-    portal_query: Query<(&Portal, &GlobalTransform)>, // Query GlobalTransform for the portal itself
+    portal_query: Query<&Portal>,
     global_transform_query: Query<&GlobalTransform>,
 ) {
-    for (portal, portal_global_transform) in &portal_query {
+    for portal in &portal_query {
         let target_transform = global_transform_query
             .get(portal.target)
             .map(GlobalTransform::compute_transform)
             .expect("target should have GlobalTransform");
-
-        // Gizmo for the portal's target (already correct)
         let start_target = target_transform.translation;
         let end_target = start_target + target_transform.forward() * 0.5;
         gizmos.arrow(start_target, end_target, ORANGE_600);
