@@ -31,8 +31,7 @@ impl PluginGroup for PortalPlugins {
 ///
 /// [`RenderTarget::Image`]: bevy::render::camera::RenderTarget
 #[non_exhaustive]
-#[derive(Component, Reflect, Debug)]
-#[reflect(Component)]
+#[derive(Component)]
 #[require(Transform)]
 pub struct Portal {
     /// The entity with the primary render [`Camera`].
@@ -52,12 +51,20 @@ pub struct Portal {
     /// # Note
     ///
     /// If you are using `Some(Face::Front)` or `None` here, and your mesh is flat, you should
-    /// consider setting [`Portal::conditionally_flip_near_plane_normal`] to `true`.
+    /// consider setting [`Portal::flip_near_plane_normal`] to `true`.
     // TODO: Can this be remotely reflected upstream now that #6042 has landed?
-    #[reflect(ignore)]
     pub cull_mode: Option<Face>,
     /// The entity that has this portal's [`camera::PortalCamera`].
-    pub linked_camera: Option<Entity>,
+    linked_camera: Entity,
+    /// Optional callback that is executed when the portals's camera is spawned.
+    ///
+    /// This lets you insert any components you'd like.
+    ///
+    /// # Notes
+    ///
+    /// * If `None`, [`Camera::order`] is set to `-1`.
+    /// * [`Camera::target`] is overriden after the callback is executed.
+    pub camera_spawn: Option<Box<dyn FnMut(&mut EntityCommands) + Send + Sync>>,
     /// If set to `true` this will flip the near plane of the [`camera::PortalCamera`]s frustum if
     /// the primary camera is facing the back face of the portal.
     ///
@@ -83,7 +90,8 @@ impl Portal {
             primary_camera,
             target,
             cull_mode: Some(Face::Back),
-            linked_camera: None,
+            linked_camera: Entity::PLACEHOLDER,
+            camera_spawn: None,
             flip_near_plane_normal: false,
         }
     }
@@ -99,6 +107,16 @@ impl Portal {
     #[must_use]
     pub fn with_flip_near_plane_normal(mut self, with_flip_near_plane_normal: bool) -> Self {
         self.flip_near_plane_normal = with_flip_near_plane_normal;
+        self
+    }
+
+    #[inline]
+    #[must_use]
+    pub fn with_camera_spawn<F>(mut self, camera_spawn: F) -> Self
+    where
+        F: FnMut(&mut EntityCommands) + Send + Sync + 'static,
+    {
+        self.camera_spawn = Some(Box::new(camera_spawn));
         self
     }
 }

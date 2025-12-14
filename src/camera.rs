@@ -1,21 +1,10 @@
 use bevy::{
-    camera::{
-        Exposure, ImageRenderTarget, RenderTarget,
-        primitives::{Frustum, HalfSpace},
-        visibility::VisibilitySystems,
-    },
-    core_pipeline::tonemapping::{DebandDither, Tonemapping},
+    asset::RenderAssetUsages,
+    camera::{CameraUpdateSystems, ImageRenderTarget, RenderTarget},
     ecs::system::SystemParam,
-    image::{TextureFormatPixelInfo, Volume},
     log::error,
-    math::FloatOrd,
     prelude::*,
-    render::{
-        render_resource::{
-            Extent3d, TextureDescriptor, TextureDimension, TextureFormat, TextureUsages,
-        },
-        view::ColorGrading,
-    },
+    render::render_resource::{Extent3d, TextureDimension, TextureFormat, TextureUsages},
     window::{PrimaryWindow, WindowRef, WindowResized},
 };
 
@@ -35,7 +24,7 @@ pub enum PortalCameraSystems {
     /// based on the [`Portal::primary_camera`]s [`GlobalTransform`].
     UpdateTransform,
     /// Updates the [`Frustum`] for [`Portal::linked_camera`].
-    UpdateFrusta,
+    UpdateProjection,
 }
 
 impl Plugin for PortalCameraPlugin {
@@ -43,10 +32,15 @@ impl Plugin for PortalCameraPlugin {
         app.configure_sets(
             PostUpdate,
             (
-                PortalCameraSystems::UpdateTransform.after(TransformSystems::Propagate),
-                PortalCameraSystems::UpdateFrusta.after(VisibilitySystems::UpdateFrusta),
+                PortalCameraSystems::UpdateTransform,
+                PortalCameraSystems::UpdateProjection,
             )
+                .before(CameraUpdateSystems)
                 .chain(),
+        )
+        .configure_sets(
+            PreUpdate,
+            PortalCameraSystems::ResizeImage.run_if(on_message::<WindowResized>),
         )
         .add_systems(
             PreUpdate,
@@ -56,7 +50,7 @@ impl Plugin for PortalCameraPlugin {
             PostUpdate,
             (
                 update_portal_camera_transform.in_set(PortalCameraSystems::UpdateTransform),
-                update_portal_camera_frusta.in_set(PortalCameraSystems::UpdateFrusta),
+                update_portal_camera_projection.in_set(PortalCameraSystems::UpdateProjection),
             ),
         )
         .add_observer(setup_portal_camera)
@@ -75,6 +69,17 @@ pub struct PortalCamera(pub Entity);
 #[reflect(Component)]
 pub struct PortalImage(pub Handle<Image>);
 
+/// System that despawns a [`Portal::linked_camera`] when the [`Portal`] component is removed from
+/// a triggered entity.
+fn despawn_portal_camera(
+    trigger: On<Remove, Portal>,
+    portal_query: Query<&Portal>,
+    mut commands: Commands,
+) {
+    let portal = portal_query.get(trigger.event_target()).unwrap();
+    commands.entity(portal.linked_camera).despawn();
+}
+
 /// System that is triggered whenever a [`Portal`] component is added to an entity.
 ///
 /// An image is created based on the primary camera's viewport size. Then, a [`PortalCamera`] is
@@ -87,14 +92,7 @@ fn setup_portal_camera(
     trigger: On<Add, Portal>,
     mut commands: Commands,
     mut portal_query: Query<&mut Portal>,
-    primary_camera_query: Query<(
-        &Camera,
-        Option<&Camera3d>,
-        Option<&DebandDither>,
-        Option<&Tonemapping>,
-        Option<&ColorGrading>,
-        Option<&Exposure>,
-    )>,
+    primary_camera_query: Query<&Camera>,
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
@@ -102,16 +100,14 @@ fn setup_portal_camera(
 
     let mut portal = portal_query.get_mut(entity).unwrap();
 
-    let Ok((primary_camera, camera_3d, tonemapping, deband_dither, color_grading, exposure)) =
-        primary_camera_query.get(portal.primary_camera)
-    else {
+    let Ok(primary_cam) = primary_camera_query.get(portal.primary_camera) else {
         error!(
             "could not setup portal camera {entity}: primary_camera does not contain a Camera component"
         );
         return;
     };
 
-    let Some(image_handle) = portal_images.with_camera(primary_camera) else {
+    let Some(image_handle) = portal_images.with_camera(primary_cam) else {
         error!("could not create portal image for {entity}");
         return;
     };
@@ -120,152 +116,167 @@ fn setup_portal_camera(
         error!("portal target is missing a GlobalTransform");
         return;
     };
-    portal.linked_camera = Some(
-        commands
-            .spawn((
-                Name::new("Portal Camera"),
-                Camera {
-                    order: 100,
-                    target: RenderTarget::Image(ImageRenderTarget {
-                        handle: image_handle.clone(),
-                        scale_factor: FloatOrd(1.0),
-                    }),
-                    ..primary_camera.clone()
-                },
-                global_transform.compute_transform(),
-                global_transform,
-                camera_3d.cloned().unwrap_or_default(),
-                tonemapping.copied().unwrap_or_default(),
-                deband_dither.copied().unwrap_or_default(),
-                color_grading.cloned().unwrap_or_default(),
-                exposure.copied().unwrap_or_default(),
-                PortalCamera(entity),
-            ))
-            .id(),
-    );
 
     commands
         .entity(entity)
         .insert(PortalImage(image_handle.clone()));
-}
 
-/// System that despawns a [`Portal::linked_camera`] when the [`Portal`] component is removed from
-/// a triggered entity.
-fn despawn_portal_camera(
-    trigger: On<Remove, Portal>,
-    portal_query: Query<&Portal>,
-    mut commands: Commands,
-) {
-    let portal = portal_query.get(trigger.event_target()).unwrap();
-
-    if let Some(linked_camera) = portal.linked_camera {
-        commands.entity(linked_camera).despawn();
+    let mut linked_cam_commands = commands.spawn((
+        Camera {
+            order: -1,
+            ..Default::default()
+        },
+        Camera3d::default(),
+        global_transform.compute_transform(),
+        global_transform,
+        PortalCamera(entity),
+    ));
+    if let Some(camera_spawn_fn) = &mut portal.camera_spawn {
+        (camera_spawn_fn)(&mut linked_cam_commands);
     }
+    let linked_cam = linked_cam_commands.id();
+    commands
+        .entity(linked_cam)
+        .entry::<Camera>()
+        .and_modify(move |mut camera| {
+            camera.target = RenderTarget::Image(ImageRenderTarget {
+                handle: image_handle.clone(),
+                scale_factor: 1.0,
+            });
+        });
+    portal.linked_camera = linked_cam;
 }
 
 /// System that updates a [`PortalCamera`]s [`Transform`] and [`GlobalTransform`] based on the
 /// primary camera.
-fn update_portal_camera_transform(
-    portal_query: Query<(&GlobalTransform, &Portal), (Without<Camera3d>, Without<PortalCamera>)>,
-    mut portal_camera_transform_query: Query<
-        (&mut GlobalTransform, &mut Transform),
-        With<PortalCamera>,
-    >,
-    global_transform_query: Query<&GlobalTransform, Without<PortalCamera>>,
+pub fn update_portal_camera_transform(
+    portal_query: Query<(&Portal, Entity), (Without<Camera3d>, Without<PortalCamera>)>,
+    mut params: ParamSet<(
+        TransformHelper,
+        Query<(&mut GlobalTransform, &mut Transform), With<PortalCamera>>,
+        Query<&mut GlobalTransform, (Without<PortalCamera>, Without<Portal>)>,
+    )>,
 ) {
-    for (portal_transform, portal) in &portal_query {
-        let Ok([primary_camera_transform, target_transform]) =
-            global_transform_query.get_many([portal.primary_camera, portal.target])
+    for (portal, portal_entity) in portal_query.iter() {
+        let transform_helper = params.p0();
+
+        let Ok(portal_transform) = transform_helper.compute_global_transform(portal_entity) else {
+            continue;
+        };
+        let Ok(primary_camera_transform) =
+            transform_helper.compute_global_transform(portal.primary_camera)
         else {
             continue;
         };
-
-        let Some((mut portal_camera_global_transform, mut portal_camera_transform)) = portal
-            .linked_camera
-            .and_then(|camera| portal_camera_transform_query.get_mut(camera).ok())
-        else {
+        let Ok(target_transform) = transform_helper.compute_global_transform(portal.target) else {
             continue;
         };
 
-        // Transform the camera's translation from world space to the portal's space
         let relative_translation = portal_transform
             .affine()
             .inverse()
             .transform_point3(primary_camera_transform.translation());
-        // Now transform it back to world space using the target's transform
         let translation = target_transform.transform_point(relative_translation);
 
         let relative_rotation =
             portal_transform.rotation().inverse() * primary_camera_transform.rotation();
         let rotation = target_transform.rotation() * relative_rotation;
 
-        portal_camera_transform.translation = translation;
-        portal_camera_transform.rotation = rotation;
-
-        *portal_camera_global_transform = GlobalTransform::from(*portal_camera_transform);
-    }
-}
-
-/// System that updates [`Frustum`] for [`PortalCamera`]s.
-fn update_portal_camera_frusta(
-    portal_query: Query<(&Portal, &GlobalTransform)>,
-    mut frustum_query: Query<&mut Frustum, With<PortalCamera>>,
-    global_transform_query: Query<&GlobalTransform>,
-) {
-    for (portal, portal_transform) in &portal_query {
-        let Some(linked_camera) = portal.linked_camera else {
-            continue;
-        };
-
-        let Ok(mut frustum) = frustum_query.get_mut(linked_camera) else {
-            continue;
-        };
-
-        let Ok([primary_camera_transform, target_transform]) =
-            global_transform_query.get_many([portal.primary_camera, portal.target])
+        // Update portal camera transform
+        let mut portal_camera_query = params.p1();
+        let Ok((mut portal_camera_global_transform, mut portal_camera_transform)) =
+            portal_camera_query.get_mut(portal.linked_camera)
         else {
             continue;
         };
 
-        let mut normal = target_transform.forward();
+        portal_camera_transform.translation = translation;
+        portal_camera_transform.rotation = rotation;
+        *portal_camera_global_transform = GlobalTransform::from(Transform {
+            translation,
+            rotation,
+            ..default()
+        });
+
+        let mut target_query = params.p2();
+        if let Ok(mut global_transform) = target_query.get_mut(portal.target) {
+            *global_transform = target_transform;
+        }
+    }
+}
+
+/// System that updates [`Projection`]s for [`PortalCamera`]s.
+fn update_portal_camera_projection(
+    portal_query: Query<(&Portal, &GlobalTransform)>,
+    mut projections: Query<&mut Projection, With<PortalCamera>>,
+    global_transform_query: Query<&GlobalTransform>,
+) {
+    for (portal, portal_transform) in &portal_query {
+        let Ok(mut projection) = projections.get_mut(portal.linked_camera) else {
+            continue;
+        };
+        let Projection::Perspective(projection) = &mut *projection else {
+            continue;
+        };
+
+        let Ok(
+            [
+                portal_camera_transform,
+                primary_camera_transform,
+                target_transform,
+            ],
+        ) = global_transform_query.get_many([
+            portal.linked_camera,
+            portal.primary_camera,
+            portal.target,
+        ])
+        else {
+            continue;
+        };
+
+        let mut world_normal = target_transform.forward().normalize();
 
         if portal.flip_near_plane_normal {
-            let camera_to_portal =
+            let primary_to_portal =
                 portal_transform.translation() - primary_camera_transform.translation();
-            if camera_to_portal.dot(*portal_transform.forward()) <= 0.0 {
-                normal = -normal;
+            let dot = primary_to_portal.dot(*portal_transform.forward());
+            if dot <= 0.0 {
+                world_normal = -world_normal;
             }
         }
 
-        let distance = -target_transform
-            .translation()
-            .dot(normal.normalize_or_zero());
-        frustum.half_spaces[4] = HalfSpace::new(normal.extend(distance));
+        let view_from_world = portal_camera_transform.affine().matrix3.inverse();
+        let view_space_normal = (view_from_world * world_normal).normalize();
+        let view_space_target = portal_camera_transform
+            .affine()
+            .inverse()
+            .transform_point3(target_transform.translation());
+        let distance = -view_space_normal.dot(view_space_target);
+
+        projection.near_clip_plane = view_space_normal.extend(distance);
     }
 }
 
 /// System that resizes [`PortalImage`]s when the [`WindowResized`] message is fired.
 fn resize_portal_images(
-    mut resized_reader: MessageReader<WindowResized>,
-    window_query: Query<&Window>,
-    portal_image_query: Query<&PortalImage>,
-    mut images: ResMut<Assets<Image>>,
+    primary_cameras: Query<&Camera, Without<PortalCamera>>,
+    mut portal_cameras: Query<&mut Camera, With<PortalCamera>>,
+    mut portals: Query<(&Portal, &mut PortalImage)>,
+    mut portal_images: PortalImages,
 ) {
-    for message in resized_reader.read() {
-        let window_size = window_query.get(message.window).unwrap().physical_size();
-        let size = Extent3d {
-            width: window_size.x,
-            height: window_size.y,
-            ..default()
+    for (portal, mut portal_image) in &mut portals {
+        let Ok(primary_camera) = primary_cameras.get(portal.primary_camera) else {
+            continue;
         };
 
-        for portal_image in &portal_image_query {
-            let Some(image) = images.get_mut(&portal_image.0) else {
-                continue;
-            };
+        let Ok(mut camera) = portal_cameras.get_mut(portal.linked_camera) else {
+            continue;
+        };
 
-            image.resize(size);
-        }
+        let Some(id) = portal_images.replace(&portal_image.0, &mut camera, primary_camera) else {
+            continue;
+        };
+        portal_image.0 = id;
     }
 }
 
@@ -278,28 +289,32 @@ struct PortalImages<'w, 's> {
 }
 
 impl PortalImages<'_, '_> {
+    fn replace(
+        &mut self,
+        id: &Handle<Image>,
+        camera: &mut Camera,
+        primary_camera: &Camera,
+    ) -> Option<Handle<Image>> {
+        self.images.remove(id);
+        let image = self.with_camera(primary_camera)?;
+        camera.target = image.clone().into();
+        Some(image)
+    }
+
     /// Creates a new [`Image`] with size matching the given `camera`.
     ///
     /// Returns `None` if no viewport size could be obtained.
     fn with_camera(&mut self, camera: &Camera) -> Option<Handle<Image>> {
         let size = self.get_viewport_size(camera)?;
-        let format = TextureFormat::Bgra8UnormSrgb;
-        let image = Image {
-            data: Some(vec![0; size.volume() * format.pixel_size().ok()?]),
-            texture_descriptor: TextureDescriptor {
-                label: None,
-                size,
-                dimension: TextureDimension::D2,
-                format,
-                mip_level_count: 1,
-                sample_count: 1,
-                usage: TextureUsages::TEXTURE_BINDING
-                    | TextureUsages::COPY_DST
-                    | TextureUsages::RENDER_ATTACHMENT,
-                view_formats: &[],
-            },
-            ..default()
-        };
+        let mut image = Image::new_uninit(
+            size,
+            TextureDimension::D2,
+            TextureFormat::Bgra8UnormSrgb,
+            RenderAssetUsages::MAIN_WORLD | RenderAssetUsages::RENDER_WORLD,
+        );
+        image.texture_descriptor.usage |= TextureUsages::TEXTURE_BINDING
+            | TextureUsages::COPY_DST
+            | TextureUsages::RENDER_ATTACHMENT;
         let handle = self.images.add(image);
         Some(handle)
     }
@@ -312,8 +327,8 @@ impl PortalImages<'_, '_> {
             Some(viewport) => Some(viewport.physical_size),
             None => match &camera.target {
                 RenderTarget::Window(window_ref) => (match window_ref {
-                    WindowRef::Primary => self.primary_window_query.single().ok(),
-                    WindowRef::Entity(entity) => self.window_query.get(*entity).ok(),
+                    WindowRef::Primary => Some(self.primary_window_query.single().unwrap()),
+                    WindowRef::Entity(entity) => Some(self.window_query.get(*entity).unwrap()),
                 })
                 .map(Window::physical_size),
                 RenderTarget::Image(img_render_handle) => {
