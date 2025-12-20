@@ -102,14 +102,14 @@ fn setup_portal_camera(
     trigger: On<Add, Portal>,
     mut commands: Commands,
     mut portal_query: Query<&mut Portal>,
-    primary_camera_query: Query<&Camera>,
+    primary_camera_query: Query<(&Camera, &RenderTarget)>,
     global_transform_query: Query<&GlobalTransform>,
     mut portal_images: PortalImages,
 ) {
     let entity = trigger.event_target();
     let mut portal = portal_query.get_mut(entity).unwrap();
 
-    let Ok(primary_cam) = primary_camera_query.get(portal.primary_camera) else {
+    let Ok((primary_cam, render_target)) = primary_camera_query.get(portal.primary_camera) else {
         error!(
             "could not setup portal camera {entity}: primary_camera does not contain a Camera component"
         );
@@ -121,7 +121,7 @@ fn setup_portal_camera(
         return;
     };
 
-    let Some(image_handle) = portal_images.with_camera(primary_cam) else {
+    let Some(image_handle) = portal_images.with_camera(primary_cam, render_target) else {
         return;
     };
 
@@ -133,6 +133,8 @@ fn setup_portal_camera(
 
     let max_depth = portal.max_depth.get();
     for iteration in 0..max_depth + 1 {
+        let handle = image_handle.clone();
+
         let mut camera_commands = commands.spawn((
             Camera::default(),
             Camera3d::default(),
@@ -140,6 +142,10 @@ fn setup_portal_camera(
             global_transform,
             PortalCameraOf(entity),
             PortalIteration(iteration as u32),
+            RenderTarget::Image(ImageRenderTarget {
+                handle,
+                scale_factor: 1.0,
+            }),
         ));
 
         if iteration == max_depth {
@@ -150,15 +156,10 @@ fn setup_portal_camera(
             (camera_spawn_fn)(&mut camera_commands);
         }
 
-        let handle = image_handle.clone();
         camera_commands
             .entry::<Camera>()
             .and_modify(move |mut camera| {
                 camera.order = camera.order - (iteration as isize + 1);
-                camera.target = RenderTarget::Image(ImageRenderTarget {
-                    handle,
-                    scale_factor: 1.0,
-                });
             });
 
         let camera_entity = camera_commands.id();
@@ -295,28 +296,28 @@ fn update_portal_camera_projection(
 
 /// System that resizes portal camera images when the window is resized.
 fn resize_portal_images(
-    primary_cameras: Query<&Camera, Without<PortalCameraOf>>,
-    mut portal_cameras: Query<&mut Camera, With<PortalCameraOf>>,
+    primary_cameras: Query<(&Camera, &RenderTarget), Without<PortalCameraOf>>,
+    mut portal_cameras: Query<&mut RenderTarget, With<PortalCameraOf>>,
     mut portals: Query<(&Portal, &mut PortalImage)>,
     mut portal_images: PortalImages,
 ) {
     for (portal, mut portal_image) in &mut portals {
-        let Ok(primary_camera) = primary_cameras.get(portal.primary_camera) else {
+        let Ok((primary_camera, render_target)) = primary_cameras.get(portal.primary_camera) else {
             continue;
         };
 
-        let Some(handle) = portal_images.with_camera(primary_camera) else {
+        let Some(handle) = portal_images.with_camera(primary_camera, render_target) else {
             continue;
         };
 
         portal_images.images.remove(&portal_image.0);
 
         for &camera_entity in &portal.cameras.0 {
-            let Ok(mut camera) = portal_cameras.get_mut(camera_entity) else {
+            let Ok(mut render_target) = portal_cameras.get_mut(camera_entity) else {
                 continue;
             };
 
-            camera.target = RenderTarget::Image(ImageRenderTarget {
+            *render_target = RenderTarget::Image(ImageRenderTarget {
                 handle: handle.clone(),
                 scale_factor: 1.0,
             });
@@ -338,8 +339,12 @@ impl PortalImages<'_, '_> {
     /// Creates a new [`Image`] with size matching the given `camera`.
     ///
     /// Returns `None` if no viewport size could be obtained.
-    fn with_camera(&mut self, camera: &Camera) -> Option<Handle<Image>> {
-        let size = self.get_viewport_size(camera)?;
+    fn with_camera(
+        &mut self,
+        camera: &Camera,
+        render_target: &RenderTarget,
+    ) -> Option<Handle<Image>> {
+        let size = self.get_viewport_size(camera, render_target)?;
         let mut image = Image::new_uninit(
             size,
             TextureDimension::D2,
@@ -356,10 +361,10 @@ impl PortalImages<'_, '_> {
     /// Retrieves the size of the viewport of a given `camera`.
     ///
     /// Returns `None` if no sizing could be obtained.
-    fn get_viewport_size(&self, camera: &Camera) -> Option<Extent3d> {
+    fn get_viewport_size(&self, camera: &Camera, render_target: &RenderTarget) -> Option<Extent3d> {
         match camera.viewport.as_ref() {
             Some(viewport) => Some(viewport.physical_size),
-            None => match &camera.target {
+            None => match &render_target {
                 RenderTarget::Window(window_ref) => (match window_ref {
                     WindowRef::Primary => Some(self.primary_window_query.single().unwrap()),
                     WindowRef::Entity(entity) => Some(self.window_query.get(*entity).unwrap()),
