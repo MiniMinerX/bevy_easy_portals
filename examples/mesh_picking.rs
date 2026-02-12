@@ -1,14 +1,14 @@
 use std::f32::consts::FRAC_PI_4;
 
 use bevy::{
+    camera::visibility::RenderLayers,
     color::palettes::tailwind::{SKY_200, VIOLET_400},
     picking::pointer::PointerInteraction,
     prelude::*,
-    render::view::RenderLayers,
 };
 #[cfg(feature = "gizmos")]
 use bevy_easy_portals::gizmos::{PortalGizmos, PortalGizmosPlugin};
-use bevy_easy_portals::{picking::PortalPickingPlugin, Portal, PortalPlugins};
+use bevy_easy_portals::{Portal, PortalPlugins, picking::PortalPickingPlugin};
 
 fn main() {
     App::new()
@@ -87,7 +87,7 @@ fn setup(
                 Portal::new(primary_camera, target),
                 RenderLayers::layer(1),
                 // We want to be able to hover the glass
-                PickingBehavior {
+                Pickable {
                     should_block_lower: false,
                     is_hoverable: true,
                 },
@@ -100,7 +100,7 @@ fn setup(
                         Glass,
                         RenderLayers::layer(1),
                         // Similarly, we want to be able to hover the portal (to pick through)
-                        PickingBehavior {
+                        Pickable {
                             should_block_lower: false,
                             is_hoverable: true,
                         },
@@ -112,11 +112,11 @@ fn setup(
     }
 }
 
-fn update_material_on<E>(
+fn update_material_on<E: EntityEvent>(
     new_material: Handle<StandardMaterial>,
-) -> impl Fn(Trigger<E>, Query<&mut MeshMaterial3d<StandardMaterial>>) {
+) -> impl Fn(On<E>, Query<&mut MeshMaterial3d<StandardMaterial>>) {
     move |trigger, mut material_query| {
-        if let Ok(mut material) = material_query.get_mut(trigger.entity()) {
+        if let Ok(mut material) = material_query.get_mut(trigger.event_target()) {
             material.0 = new_material.clone();
         }
     }
@@ -142,19 +142,19 @@ fn draw_mesh_intersections(
     }
 }
 
-fn rotate_y_on_drag(drag: Trigger<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
+fn rotate_y_on_drag(drag: On<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
     if !matches!(drag.button, PointerButton::Secondary) {
         return;
     }
-    let mut transform = transform_query.get_mut(drag.entity()).unwrap();
+    let mut transform = transform_query.get_mut(drag.event_target()).unwrap();
     transform.rotate_y(drag.delta.x * 0.005);
 }
 
-fn rotate_xy_on_drag(drag: Trigger<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
+fn rotate_xy_on_drag(drag: On<Pointer<Drag>>, mut transform_query: Query<&mut Transform>) {
     if !matches!(drag.button, PointerButton::Primary) {
         return;
     }
-    let mut transform = transform_query.get_mut(drag.entity()).unwrap();
+    let mut transform = transform_query.get_mut(drag.event_target()).unwrap();
     transform.rotate_y(drag.delta.x * 0.02);
     transform.rotate_x(drag.delta.y * 0.02);
 }

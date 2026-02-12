@@ -1,43 +1,33 @@
 use bevy::{
-    asset::load_internal_asset,
+    asset::{AssetPath, embedded_asset, embedded_path},
     core_pipeline::core_3d::CORE_3D_DEPTH_FORMAT,
+    mesh::MeshVertexBufferLayoutRef,
     pbr::{MaterialPipeline, MaterialPipelineKey},
     prelude::*,
-    render::{
-        mesh::MeshVertexBufferLayoutRef,
-        render_resource::{
-            AsBindGroup, CompareFunction, DepthBiasState, DepthStencilState, Face,
-            RenderPipelineDescriptor, ShaderRef, SpecializedMeshPipelineError, StencilFaceState,
-            StencilState,
-        },
+    render::render_resource::{
+        AsBindGroup, CompareFunction, DepthBiasState, DepthStencilState, Face,
+        RenderPipelineDescriptor, SpecializedMeshPipelineError, StencilFaceState, StencilState,
     },
+    shader::ShaderRef,
     window::WindowResized,
 };
 
 use crate::{
-    camera::{PortalCameraSystems, PortalImage},
     Portal,
+    camera::{PortalCameraSystems, PortalImage},
 };
-
-pub const PORTAL_SHADER_HANDLE: Handle<Shader> =
-    Handle::weak_from_u128(115090128739399034051596692516865947112);
 
 pub struct PortalMaterialPlugin;
 
 impl Plugin for PortalMaterialPlugin {
     fn build(&self, app: &mut App) {
-        load_internal_asset!(
-            app,
-            PORTAL_SHADER_HANDLE,
-            concat!(env!("CARGO_MANIFEST_DIR"), "/assets/portal.wgsl"),
-            Shader::from_wgsl
-        );
+        embedded_asset!(app, "shaders/portal.wgsl");
 
         app.add_plugins(MaterialPlugin::<PortalMaterial>::default())
             .add_systems(
                 PreUpdate,
                 update_materials::<PortalMaterial>
-                    .run_if(on_event::<WindowResized>)
+                    .run_if(on_message::<WindowResized>)
                     .after(PortalCameraSystems::ResizeImage),
             )
             .add_observer(spawn_material);
@@ -45,7 +35,7 @@ impl Plugin for PortalMaterialPlugin {
 }
 
 /// Material used for a [`Portal`]'s mesh.
-#[derive(Asset, AsBindGroup, Clone, TypePath, Reflect)]
+#[derive(Asset, AsBindGroup, Clone, Reflect)]
 #[bind_group_data(PortalMaterialKey)]
 pub struct PortalMaterial {
     #[texture(0)]
@@ -58,12 +48,14 @@ pub struct PortalMaterial {
     /// This field's value is inherited from what is set on [`Portal`], but not kept in sync.
     ///
     /// Defaults to `Some(Face::Back)`, similar to [`StandardMaterial::cull_mode`] and [`Portal`].
+    #[reflect(ignore)]
     pub cull_mode: Option<Face>,
     /// The effect of draw calls on the depth and stencil aspects of the portal.
     ///
     /// You can make use of this field to resolve z-fighting.
     ///
     /// Defaults to the standard mesh [`DepthStencilState`].
+    #[reflect(ignore)]
     pub depth_stencil: Option<DepthStencilState>,
 }
 
@@ -90,11 +82,13 @@ impl Default for PortalMaterial {
 
 impl Material for PortalMaterial {
     fn fragment_shader() -> ShaderRef {
-        PORTAL_SHADER_HANDLE.into()
+        ShaderRef::Path(
+            AssetPath::from_path_buf(embedded_path!("shaders/portal.wgsl")).with_source("embedded"),
+        )
     }
 
     fn specialize(
-        _pipeline: &MaterialPipeline<Self>,
+        _pipeline: &MaterialPipeline,
         descriptor: &mut RenderPipelineDescriptor,
         _layout: &MeshVertexBufferLayoutRef,
         key: MaterialPipelineKey<Self>,
@@ -133,12 +127,12 @@ pub fn update_materials<T: Material>(
 }
 
 fn spawn_material(
-    trigger: Trigger<OnAdd, PortalImage>,
+    trigger: On<Add, PortalImage>,
     mut commands: Commands,
     portal_query: Query<(&Portal, &PortalImage)>,
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
-    let entity = trigger.entity();
+    let entity = trigger.event_target();
     let Ok((portal, portal_image)) = portal_query.get(entity) else {
         return;
     };
