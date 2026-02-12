@@ -24,7 +24,7 @@ use uuid::Uuid;
 
 use crate::{
     Portal,
-    camera::{PortalCamera, PortalImage},
+    camera::{PortalCameraOf, PortalImage},
 };
 
 /// Enables picking "through" [`Portal`]s.
@@ -68,7 +68,7 @@ fn add_pointer(
 // and be just fine..
 fn fix_portal_rays(
     portal_query: Query<(&Portal, &PointerId, &PointerLocation)>,
-    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<PortalCamera>>,
+    camera_query: Query<(&Camera, &GlobalTransform, &Projection), With<PortalCameraOf>>,
     mut ray_map: ResMut<RayMap>,
 ) {
     for (portal, portal_pointer_id, pointer_location) in &portal_query {
@@ -77,7 +77,10 @@ fn fix_portal_rays(
             .map
             .retain(|ray_id, _| &ray_id.pointer != portal_pointer_id);
 
-        let Ok((camera, camera_transform, projection)) = camera_query.get(portal.linked_camera)
+        let Some(camera_entity) = portal.first_camera() else {
+            continue;
+        };
+        let Ok((camera, camera_transform, projection)) = camera_query.get(camera_entity)
         else {
             continue;
         };
@@ -133,7 +136,7 @@ fn fix_portal_rays(
 
         ray_map
             .map
-            .insert(RayId::new(portal.linked_camera, *portal_pointer_id), ray);
+            .insert(RayId::new(camera_entity, *portal_pointer_id), ray);
     }
 }
 
@@ -192,8 +195,11 @@ fn portal_picking(
             continue;
         };
 
+        let Some(portal_camera_entity) = portal.first_camera() else {
+            continue;
+        };
         let Ok((portal_camera, portal_camera_transform, _)) =
-            camera_global_transform_query.get(portal.linked_camera)
+            camera_global_transform_query.get(portal_camera_entity)
         else {
             continue;
         };

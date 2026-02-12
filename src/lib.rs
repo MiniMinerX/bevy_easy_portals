@@ -30,7 +30,7 @@ impl PluginGroup for PortalPlugins {
 /// Component used to create a portal.
 ///
 /// If [`camera::PortalCameraPlugin`] is enabled, adding this to an entity causes a camera (marked
-/// with [`camera::PortalCamera`], and with [`RenderTarget::Image`]) to be spawned, inheriting the
+/// with [`camera::PortalCameraOf`], and with [`RenderTarget::Image`]) to be spawned, inheriting the
 /// the properties of [`Portal::primary_camera`].
 ///
 /// If [`material::PortalMaterialPlugin`] is enabled, a [`material::PortalMaterial`] is inserted on
@@ -142,5 +142,12 @@ impl Portal {
     {
         self.camera_spawn = Some(Box::new(camera_spawn));
         self
+    }
+
+    /// Returns the first portal camera entity, if any.
+    #[inline]
+    #[must_use]
+    pub fn first_camera(&self) -> Option<Entity> {
+        self.cameras.first()
     }
 }

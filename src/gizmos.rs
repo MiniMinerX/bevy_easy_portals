@@ -35,7 +35,7 @@ fn debug_portal_meshes(
     }
 }
 
-/// System that renders arrows indicating the translation and rotation of [`PortalCamera`]s.
+/// System that renders arrows indicating the translation and rotation of portal cameras.
 fn debug_portal_cameras(
     mut gizmos: Gizmos<PortalGizmos>,
     portal_query: Query<&Portal>,

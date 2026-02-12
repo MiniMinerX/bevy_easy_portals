@@ -10,7 +10,7 @@ use bevy::{
 
 use crate::Portal;
 
-/// Plugin that provides [`PortalCamera`] spawning/despawning, transform and frusta updates, and
+/// Plugin that provides portal camera spawning/despawning, transform and frusta updates, and
 /// resizing rendered portal images.
 pub struct PortalCameraPlugin;
 
@@ -22,7 +22,7 @@ pub enum PortalCameraSystems {
     ///
     /// Runs in the [`PreUpdate`] schedule.
     ResizeImage,
-    /// Updates the [`GlobalTransform`] and [`Transform`] components for [`Portal::linked_camera`]
+    /// Updates the [`GlobalTransform`] and [`Transform`] components for the portal's cameras
     /// based on the [`Portal::primary_camera`]s [`GlobalTransform`].
     ///
     /// Runs in the [`PostUpdate`] schedule.
@@ -84,7 +84,16 @@ pub struct PortalCameraOf(pub Entity);
 #[relationship_target(relationship = PortalCameraOf, linked_spawn)]
 pub struct PortalCameras(Vec<Entity>);
 
-/// Component used to store a weak reference to a [`PortalCamera`]'s rendered image.
+impl PortalCameras {
+    /// Returns the first portal camera entity, if any.
+    #[inline]
+    #[must_use]
+    pub fn first(&self) -> Option<Entity> {
+        self.0.first().copied()
+    }
+}
+
+/// Component used to store a weak reference to a portal camera's rendered image.
 #[derive(Component, Reflect, Debug, Deref, DerefMut)]
 #[reflect(Component)]
 pub struct PortalImage(pub Handle<Image>);
