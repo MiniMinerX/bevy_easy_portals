@@ -5,3 +5,6 @@
 
 # Editor (rust-analyzer features: gizmos, picking)
 .vscode
+
+# Cargo lock file (untracked per project preference)
+Cargo.lock

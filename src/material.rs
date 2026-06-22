@@ -66,8 +66,8 @@ impl Default for PortalMaterial {
             cull_mode: Some(Face::Back),
             depth_stencil: Some(DepthStencilState {
                 format: CORE_3D_DEPTH_FORMAT,
-                depth_write_enabled: true,
-                depth_compare: CompareFunction::GreaterEqual,
+                depth_write_enabled: Some(true),
+                depth_compare: Some(CompareFunction::GreaterEqual),
                 stencil: StencilState {
                     front: StencilFaceState::IGNORE,
                     back: StencilFaceState::IGNORE,
@@ -138,7 +138,7 @@ fn update_materials(
     mut materials: ResMut<Assets<PortalMaterial>>,
 ) {
     for (portal_image, material) in &portals {
-        let Some(portal_material) = materials.get_mut(&material.0) else {
+        let Some(mut portal_material) = materials.get_mut(&material.0) else {
             continue;
         };
         portal_material.base_color_texture = Some(portal_image.0.clone());
